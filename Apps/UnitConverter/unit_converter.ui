@@ -66,6 +66,19 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="btn_show_path">
+       <property name="minimumSize">
+        <size><width>0</width><height>40</height></size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font-size: 13px; background-color: #27ae60; color: white; border: none; border-radius: 5px; padding: 5px 12px;</string>
+       </property>
+       <property name="text">
+        <string>📂 경로</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="count_label">
        <property name="text"><string>-</string></property>
        <property name="styleSheet"><string notr="true">font-size: 22px; font-weight: bold; padding: 5px 15px; color: #9c27b0;</string></property>
