@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import subprocess
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFrame,
                              QScrollArea, QGridLayout, QDialog, QStackedWidget,
@@ -296,6 +297,7 @@ class MainWindow(QMainWindow):
         # 탭별 PathBar
         path_bar = PathBar()
         self._tab_path_bars[id(tab_stack)] = path_bar
+        self._tab_path_bars[id(tab_container)] = path_bar   # container로도 조회 가능
         # tab_stack → tab_container 역방향 매핑 (탭 인덱스 조회용)
         self._stack_to_container[id(tab_stack)] = tab_container
         container_layout.addWidget(tab_stack, 1)
@@ -386,9 +388,14 @@ class MainWindow(QMainWindow):
     def toggle_sidebar(self):
         self.sidebar_expanded = not self.sidebar_expanded
         self.sidebar.setFixedWidth(200 if self.sidebar_expanded else 60)
-        self.btn_apps.update_text(self.sidebar_expanded)
-        self.btn_settings.update_text(self.sidebar_expanded)
-        self.btn_profile.update_text(self.sidebar_expanded)
+        if self.sidebar_expanded:
+            self.btn_apps.setText("📱  Apps")
+            self.btn_settings.setText("⚙️  Settings")
+            self.btn_profile.setText("👤  Profile")
+        else:
+            self.btn_apps.setText("📱")
+            self.btn_settings.setText("⚙️")
+            self.btn_profile.setText("👤")
 
     def show_apps(self):
         self.content_stack.setCurrentWidget(self.apps_page)
@@ -408,19 +415,18 @@ class MainWindow(QMainWindow):
         self.btn_settings.setChecked(False)
         self.btn_profile.setChecked(True)
 
+    def closeEvent(self, event):
+        event.accept()
+        QApplication.instance().quit()
+
     def launch_app_popup(self, app_name):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(app_name)
-        dialog.setGeometry(200, 200, 600, 480)
-        dialog.setWindowFlags(dialog.windowFlags() | Qt.Window)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(0, 0, 0, 0)
-        os.chdir(self._get_active_tab_path())
-        app_widget = self.apps[app_name][0]()
-        layout.addWidget(app_widget)
-        dialog.finished.connect(lambda: self._popups.discard(dialog))
-        self._popups.add(dialog)
-        dialog.show()
+        """우클릭: 완전히 독립된 별도 프로세스로 앱 실행"""
+        work_dir = self._get_active_tab_path()
+        launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'run_app.py')
+        subprocess.Popen(
+            [sys.executable, launcher, app_name, work_dir],
+            cwd=work_dir
+        )
 
 
 # ── 진입점 ──────────────────────────────────────────────────
@@ -433,6 +439,7 @@ def main():
         pass
     heart_icon = make_heart_icon()
     app.setWindowIcon(heart_icon)
+    app.setQuitOnLastWindowClosed(False)
     window = MainWindow()
     window.setWindowIcon(heart_icon)
     window.show()
