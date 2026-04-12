@@ -1,4 +1,25 @@
-__pycache__/main.cpython-310.pyc
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
 randompick.txt
-__pycache__/appSetting.cpython-310.pyc
-Apps/Counter/__pycache__/counter.cpython-310.pyc
+.mxby/
