@@ -19,12 +19,6 @@ class PathBar(QFrame):
     def _setup_ui(self):
         self.setFrameShape(QFrame.StyledPanel)
         self.setFixedHeight(36)
-        self.setStyleSheet("""
-            PathBar {
-                background-color: #ecf0f1;
-                border-top: 1px solid #bdc3c7;
-            }
-        """)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 2, 10, 2)
         layout.setSpacing(8)
@@ -52,6 +46,21 @@ class PathBar(QFrame):
         layout.addWidget(icon)
         layout.addWidget(self.path_label, 1)
         layout.addWidget(self.change_btn)
+        self.apply_theme(
+            {
+                "path_bg": "#ecf0f1",
+                "path_border": "#bdc3c7",
+                "path_text": "#2c3e50",
+                "path_button_bg": "#3498db",
+                "path_button_hover": "#2980b9",
+                "path_button_text": "#ffffff",
+                "path_button_disabled_bg": "#aab7b8",
+                "path_button_disabled_text": "#7f8c8d",
+                "path_disabled_bg": "#d5d8dc",
+                "path_disabled_border": "#aab7b8",
+            },
+            disabled=False,
+        )
 
     def _change_path(self):
         new_path = QFileDialog.getExistingDirectory(self, "작업 경로 선택", self._path)
@@ -62,6 +71,35 @@ class PathBar(QFrame):
         self._path = path
         self.path_label.setText(path)
         self.path_changed.emit(path)
+
+    def apply_theme(self, colors, disabled=False):
+        bg = colors["path_disabled_bg"] if disabled else colors["path_bg"]
+        border = colors["path_disabled_border"] if disabled else colors["path_border"]
+        button_bg = colors["path_button_disabled_bg"] if disabled else colors["path_button_bg"]
+        button_text = colors["path_button_disabled_text"] if disabled else colors["path_button_text"]
+        hover = colors["path_button_disabled_bg"] if disabled else colors["path_button_hover"]
+
+        self.setStyleSheet(f"""
+            PathBar {{
+                background-color: {bg};
+                border-top: 1px solid {border};
+            }}
+        """)
+        self.path_label.setStyleSheet(f"color:{colors['path_text']};")
+        self.change_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {button_bg};
+                color: {button_text};
+                border: none;
+                border-radius: 4px;
+                padding: 0 10px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background-color: {hover};
+            }}
+        """)
+        self.setEnabled(not disabled)
 
     @property
     def path(self) -> str:

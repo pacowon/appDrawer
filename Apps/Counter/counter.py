@@ -16,7 +16,7 @@ class CounterApp(CountMixin, QWidget):
         self.lbl.setFont(QFont("Arial", 80, QFont.Bold))
         self.lbl.setStyleSheet("color:#2c3e50;")
         row = QHBoxLayout()
-        for text, delta, color in [("-10","#e74c3c"), ("-1","#e67e22"), ("+1","#2ecc71"), ("+10","#3498db")]:
+        for text, color in [("-10","#e74c3c"), ("-1","#e67e22"), ("+1","#2ecc71"), ("+10","#3498db")]:
             d = int(text)
             btn = QPushButton(text)
             btn.setFixedSize(70, 50)

@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>앱 런처</string>
+   <string>Sexy Model - ModelX</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
@@ -208,7 +208,7 @@ QPushButton:checked {
     <item>
      <widget class="QStackedWidget" name="content_stack">
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="apps_page">
        <layout class="QVBoxLayout" name="apps_page_layout">
@@ -234,7 +234,7 @@ QPushButton:checked {
         <item>
          <widget class="QLabel" name="settings_label">
           <property name="text">
-           <string>설정 페이지</string>
+           <string>Setting Page</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignCenter</set>
@@ -248,7 +248,7 @@ QPushButton:checked {
         <item>
          <widget class="QLabel" name="profile_label">
           <property name="text">
-           <string>프로필 페이지</string>
+           <string>Profile Page</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignCenter</set>
