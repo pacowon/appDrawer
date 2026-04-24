@@ -758,6 +758,52 @@ class MainWindow(QMainWindow):
             QFrame {{
                 color: {colors['text']};
             }}
+            QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox, QListWidget {{
+                background-color: {colors['input_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 8px 10px;
+                selection-background-color: {colors['accent']};
+                selection-color: #ffffff;
+            }}
+            QLineEdit[readOnly="true"], QTextEdit[readOnly="true"], QPlainTextEdit[readOnly="true"] {{
+                background-color: {colors['panel_alt_bg']};
+            }}
+            QLineEdit::placeholder, QTextEdit::placeholder, QPlainTextEdit::placeholder {{
+                color: {colors['muted_text']};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                background: transparent;
+                padding-right: 6px;
+            }}
+            QListWidget::item:selected {{
+                background-color: {colors['accent']};
+                color: #ffffff;
+            }}
+            QTableWidget {{
+                background-color: {colors['input_bg']};
+                alternate-background-color: {colors['panel_alt_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                gridline-color: {colors['border']};
+                outline: 0;
+                selection-background-color: {colors['accent']};
+                selection-color: #ffffff;
+            }}
+            QTableCornerButton::section, QHeaderView::section {{
+                background-color: {colors['panel_alt_bg']};
+                color: {colors['text']};
+                border: none;
+                border-bottom: 1px solid {colors['border']};
+                padding: 8px;
+                font-weight: bold;
+            }}
+            QTableWidget::item {{
+                padding: 8px;
+                border-bottom: 1px solid {colors['border']};
+            }}
             QScrollArea {{
                 border: none;
                 background-color: {colors['page_bg']};
