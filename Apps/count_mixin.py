@@ -25,13 +25,26 @@ class CountMixin:
     def set_path_provider(self, callback):
         self._get_save_path = callback
 
+    def _resolve_save_path(self):
+        path = None
+        if self._get_save_path:
+            try:
+                path = self._get_save_path()
+            except Exception as e:
+                print(f"[path provider error] {e}")
+
+        if not path:
+            path = os.getcwd()
+
+        return os.path.abspath(os.fspath(path))
+
     def _show_path(self):
-        path = self._get_save_path() if self._get_save_path else os.getcwd()
+        path = self._resolve_save_path()
         QMessageBox.information(self, "현재 경로", path)
 
     # 저장 파일 경로
     def _file_path(self):
-        save_dir = self._get_save_path() if self._get_save_path else os.getcwd()
+        save_dir = self._resolve_save_path()
         base = type(self).__name__.replace("App", "").lower()
         return os.path.join(save_dir, f"{base}.txt")
 

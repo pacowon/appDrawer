@@ -804,6 +804,24 @@ class MainWindow(QMainWindow):
                 padding: 8px;
                 border-bottom: 1px solid {colors['border']};
             }}
+            QMessageBox {{
+                background-color: {colors['panel_bg']};
+            }}
+            QMessageBox QLabel {{
+                color: {colors['text']};
+                background: transparent;
+            }}
+            QMessageBox QPushButton {{
+                background-color: {colors['panel_alt_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 8px 16px;
+                min-width: 72px;
+            }}
+            QMessageBox QPushButton:hover {{
+                background-color: {colors['card_hover_bg']};
+            }}
             QScrollArea {{
                 border: none;
                 background-color: {colors['page_bg']};
@@ -1064,10 +1082,30 @@ class MainWindow(QMainWindow):
         pb = self._tab_path_bars.get(id(container))
         return pb.path if pb else os.getcwd()
 
+    def _plus_tab_index(self):
+        return self.apps_tab_widget.count() - 1
+
+    def _normal_tab_count(self):
+        return max(0, self.apps_tab_widget.count() - 1)
+
+    def _renumber_app_list_tabs(self):
+        tab_number = 1
+        for index in range(self._normal_tab_count()):
+            container = self.apps_tab_widget.widget(index)
+            if not container:
+                continue
+            default_tab_name = f"App List {tab_number}"
+            current_tab_name = self.apps_tab_widget.tabText(index)
+            container.setProperty("default_tab_name", default_tab_name)
+            if current_tab_name.startswith("App List "):
+                self.apps_tab_widget.setTabText(index, default_tab_name)
+            tab_number += 1
+
     def add_new_app_tab(self, tab_name):
         # 탭 전체를 감싸는 컨테이너 (그리드 + PathBar)
         tab_container = QWidget()
         tab_container.setObjectName("app_tab_container")
+        tab_container.setProperty("default_tab_name", tab_name)
         container_layout = QVBoxLayout(tab_container)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
@@ -1107,6 +1145,7 @@ class MainWindow(QMainWindow):
         idx = self.apps_tab_widget.count() - 1
         self.apps_tab_widget.insertTab(idx, tab_container, tab_name)
         self.apps_tab_widget.setCurrentIndex(idx)
+        self._renumber_app_list_tabs()
 
     def launch_app_in_tab(self, app_name, tab_stack, original_tab_name):
         # tab_container 기준으로 탭 인덱스 찾기
@@ -1128,7 +1167,11 @@ class MainWindow(QMainWindow):
             tab_stack.setCurrentIndex(0)
             idx = self.apps_tab_widget.indexOf(tab_container) if tab_container else -1
             if idx >= 0:
-                self.apps_tab_widget.setTabText(idx, original_tab_name)
+                default_tab_name = (
+                    tab_container.property("default_tab_name")
+                    if tab_container else None
+                ) or original_tab_name
+                self.apps_tab_widget.setTabText(idx, default_tab_name)
             # PathBar 원래 스타일로 복원
             if path_bar:
                 path_bar.apply_theme(THEMES[self.current_theme_name], disabled=False)
@@ -1169,13 +1212,44 @@ class MainWindow(QMainWindow):
         tab_stack.setCurrentIndex(1)
 
     def on_tab_changed(self, index):
-        if index == self.apps_tab_widget.count() - 1:
-            n = self.apps_tab_widget.count() - 1
-            self.add_new_app_tab(f"App List {n + 1}")
+        if index == self._plus_tab_index():
+            self.add_new_app_tab(f"App List {self._normal_tab_count() + 1}")
 
     def close_app_tab(self, index):
-        if self.apps_tab_widget.count() > 2:
+        if index < 0 or index == self._plus_tab_index():
+            return
+
+        current_index = self.apps_tab_widget.currentIndex()
+        tab_container = self.apps_tab_widget.widget(index)
+        tab_stack = tab_container.findChild(QStackedWidget, "app_tab_stack") if tab_container else None
+
+        self.apps_tab_widget.blockSignals(True)
+        try:
             self.apps_tab_widget.removeTab(index)
+            if tab_container:
+                self._tab_path_bars.pop(id(tab_container), None)
+            if tab_stack:
+                self._tab_path_bars.pop(id(tab_stack), None)
+                self._stack_to_container.pop(id(tab_stack), None)
+            if tab_container:
+                tab_container.deleteLater()
+
+            if self._normal_tab_count() == 0:
+                self.add_new_app_tab("App List 1")
+                next_index = 0
+            elif current_index == index:
+                next_index = max(0, index - 1)
+            elif current_index > index:
+                next_index = current_index - 1
+            else:
+                next_index = current_index
+
+            if 0 <= next_index < self._normal_tab_count():
+                self.apps_tab_widget.setCurrentIndex(next_index)
+        finally:
+            self.apps_tab_widget.blockSignals(False)
+
+        self._renumber_app_list_tabs()
 
     def toggle_sidebar(self):
         self.sidebar_expanded = not self.sidebar_expanded
