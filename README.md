@@ -130,6 +130,12 @@ class NewApp(QWidget):
 
 `CountMixin`을 쓰려면 `btn_count`, `count_label`, 선택적으로 `btn_show_path`를 UI에 두고 `self.setup_count()`를 호출하면 됩니다.
 
+### 테마 코드 위치
+
+- 앱 등록과 실행 방식은 `appSetting.py`에서 관리합니다.
+- 테마 정의와 테마 적용 로직은 모두 `main.py`에서 관리합니다.
+- 새 테마를 추가하거나 기존 테마 색을 수정할 때는 `main.py`만 수정합니다.
+
 ### 3. 레지스트리 등록
 
 새 앱은 `main.py`가 아니라 `appSetting.py`의 `APP_REGISTRY`에 등록합니다.

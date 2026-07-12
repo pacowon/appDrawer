@@ -17,7 +17,7 @@ from PyQt5.uic import loadUi
 
 from Apps.path_bar import PathBar
 from icon import make_heart_icon
-from appSetting import APP_REGISTRY, THEMES
+from appSetting import APP_REGISTRY, get_app_config
 
 # ── 앱 순서 영속화 ──────────────────────────────────────────
 ORDER_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_order.json")
@@ -31,6 +31,133 @@ MAX_USAGE_HISTORY = 500
 DEFAULT_LAYOUT_SETTINGS = {
     "max_columns": 5,
     "badge_size": 130,
+}
+
+THEMES = {
+    "light": {
+        "label": "Light",
+        "window_bg": "#f5f7fb",
+        "page_bg": "#ffffff",
+        "panel_bg": "#ffffff",
+        "panel_alt_bg": "#eef2f7",
+        "border": "#d8dee8",
+        "text": "#223046",
+        "muted_text": "#6b7a90",
+        "sidebar_bg": "#2c3e50",
+        "sidebar_hover": "rgba(255,255,255,0.10)",
+        "sidebar_checked": "rgba(255,255,255,0.20)",
+        "sidebar_text": "#ffffff",
+        "accent": "#3498db",
+        "accent_hover": "#2980b9",
+        "input_bg": "#ffffff",
+        "card_bg": "#f0f4f8",
+        "card_hover_bg": "#e7edf5",
+        "card_border": "#d5dde7",
+        "card_hover_border": "#3498db",
+        "path_bg": "#ecf0f1",
+        "path_border": "#bdc3c7",
+        "path_text": "#2c3e50",
+        "path_button_bg": "#3498db",
+        "path_button_hover": "#2980b9",
+        "path_button_text": "#ffffff",
+        "path_button_disabled_bg": "#aab7b8",
+        "path_button_disabled_text": "#7f8c8d",
+        "path_disabled_bg": "#d5d8dc",
+        "path_disabled_border": "#aab7b8",
+    },
+    "dark": {
+        "label": "Dark",
+        "window_bg": "#11161d",
+        "page_bg": "#17202b",
+        "panel_bg": "#1d2733",
+        "panel_alt_bg": "#243140",
+        "border": "#314050",
+        "text": "#ecf2f8",
+        "muted_text": "#9db0c3",
+        "sidebar_bg": "#0e141b",
+        "sidebar_hover": "rgba(255,255,255,0.08)",
+        "sidebar_checked": "rgba(255,255,255,0.16)",
+        "sidebar_text": "#f5f8fc",
+        "accent": "#4db6ff",
+        "accent_hover": "#3595d6",
+        "input_bg": "#243140",
+        "card_bg": "#223040",
+        "card_hover_bg": "#2a3a4c",
+        "card_border": "#3a4b5d",
+        "card_hover_border": "#4db6ff",
+        "path_bg": "#233040",
+        "path_border": "#36485a",
+        "path_text": "#ecf2f8",
+        "path_button_bg": "#4db6ff",
+        "path_button_hover": "#3595d6",
+        "path_button_text": "#08131f",
+        "path_button_disabled_bg": "#55697d",
+        "path_button_disabled_text": "#d0dae4",
+        "path_disabled_bg": "#1b2632",
+        "path_disabled_border": "#36485a",
+    },
+    "pink": {
+        "label": "Pink",
+        "window_bg": "#ffc7e1",
+        "page_bg": "#ffd8ea",
+        "panel_bg": "#ffe4f0",
+        "panel_alt_bg": "#ffc6df",
+        "border": "#f5bdd7",
+        "text": "#5e2341",
+        "muted_text": "#b0678d",
+        "sidebar_bg": "#ff6fb0",
+        "sidebar_hover": "rgba(255,255,255,0.20)",
+        "sidebar_checked": "rgba(255,255,255,0.30)",
+        "sidebar_text": "#fff8fc",
+        "accent": "#ff4fa0",
+        "accent_hover": "#f0338f",
+        "input_bg": "#ffedf6",
+        "card_bg": "#ffe0ee",
+        "card_hover_bg": "#ffcfe3",
+        "card_border": "#f8bfd9",
+        "card_hover_border": "#ff4fa0",
+        "path_bg": "#ffd9eb",
+        "path_border": "#f2b3d1",
+        "path_text": "#6d2850",
+        "path_button_bg": "#ff4fa0",
+        "path_button_hover": "#f0338f",
+        "path_button_text": "#ffffff",
+        "path_button_disabled_bg": "#e3a8c5",
+        "path_button_disabled_text": "#fff6fb",
+        "path_disabled_bg": "#f8cade",
+        "path_disabled_border": "#ebb0cd",
+    },
+    "sunset": {
+        "label": "Sunset",
+        "window_bg": "#fff2e8",
+        "page_bg": "#fffaf6",
+        "panel_bg": "#ffffff",
+        "panel_alt_bg": "#ffe8d7",
+        "border": "#f1c9ae",
+        "text": "#4b2d1f",
+        "muted_text": "#8f6853",
+        "sidebar_bg": "#4a2f2a",
+        "sidebar_hover": "rgba(255,255,255,0.10)",
+        "sidebar_checked": "rgba(255,255,255,0.18)",
+        "sidebar_text": "#fff7f2",
+        "accent": "#e67e22",
+        "accent_hover": "#cf6d15",
+        "input_bg": "#ffffff",
+        "card_bg": "#fff2e5",
+        "card_hover_bg": "#ffe7d3",
+        "card_border": "#f0cfb4",
+        "card_hover_border": "#e67e22",
+        "path_bg": "#f8e3d4",
+        "path_border": "#e3bfa4",
+        "path_text": "#4b2d1f",
+        "path_button_bg": "#e67e22",
+        "path_button_hover": "#cf6d15",
+        "path_button_text": "#ffffff",
+        "path_button_disabled_bg": "#cfb39f",
+        "path_button_disabled_text": "#fff7f2",
+        "path_disabled_bg": "#efd5c5",
+        "path_disabled_border": "#d8b198",
+    },
 }
 
 def save_order(order):
@@ -419,8 +546,8 @@ class AppGrid(QWidget):
             section_layout.setContentsMargins(0, 0, 0, 0)
 
             for i, name in enumerate(group_apps):
-                cls, icon = self.apps[name]
-                card = AppCard(name, cls, icon, badge_size=card_size)
+                config = get_app_config(self.apps[name])
+                card = AppCard(name, config.get("app_class"), config["icon"], badge_size=card_size)
                 card.clicked.connect(self.on_click)
                 card.rightClicked.connect(self.on_right_click)
                 self.cards.append(card)
@@ -893,13 +1020,25 @@ class MainWindow(QMainWindow):
             QCheckBox {{
                 color: {colors['text']};
             }}
+            QRadioButton {{
+                color: {colors['text']};
+            }}
             QCheckBox::indicator {{
+                background-color: {colors['input_bg']};
+            }}
+            QRadioButton::indicator {{
                 background-color: {colors['input_bg']};
             }}
             QCheckBox::indicator:hover {{
                 background-color: {colors['panel_alt_bg']};
             }}
+            QRadioButton::indicator:hover {{
+                background-color: {colors['panel_alt_bg']};
+            }}
             QCheckBox::indicator:checked {{
+                background-color: {colors['accent']};
+            }}
+            QRadioButton::indicator:checked {{
                 background-color: {colors['accent']};
             }}
             QListWidget::item:selected {{
@@ -1320,6 +1459,12 @@ class MainWindow(QMainWindow):
         tab_index = self.apps_tab_widget.indexOf(tab_container) if tab_container else -1
         if tab_index >= 0:
             self.apps_tab_widget.setTabText(tab_index, app_name)
+        app_config = get_app_config(self.apps[app_name])
+        if app_config["type"] == "script":
+            if tab_index >= 0:
+                self.apps_tab_widget.setTabText(tab_index, original_tab_name)
+            self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack))
+            return
         record_app_usage(app_name, "tab")
         app_page = QWidget()
         app_layout = QVBoxLayout(app_page)
@@ -1362,7 +1507,7 @@ class MainWindow(QMainWindow):
         previous_cwd = os.getcwd()
         try:
             os.chdir(target_path)
-            app_widget = self.apps[app_name][0]()
+            app_widget = app_config["app_class"]()
             if hasattr(app_widget, "set_path_provider"):
                 app_widget.set_path_provider(lambda s=tab_stack: self._get_tab_path(s))
 

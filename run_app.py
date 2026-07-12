@@ -5,6 +5,7 @@
 """
 import sys
 import os
+import subprocess
 
 def main():
     if len(sys.argv) < 2:
@@ -21,15 +22,28 @@ def main():
         pass
 
     from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
-    from appSetting import APP_REGISTRY
+    from appSetting import APP_REGISTRY, get_app_config
 
     if app_name not in APP_REGISTRY:
         print(f"Unknown app: {app_name}")
         sys.exit(1)
 
+    app_config = get_app_config(APP_REGISTRY[app_name])
+    if app_config["type"] == "script":
+        script_path = app_config.get("script")
+        if not script_path:
+            print(f"Script path is missing for app: {app_name}")
+            sys.exit(1)
+
+        script_abspath = os.path.abspath(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), script_path)
+        )
+        subprocess.Popen([sys.executable, script_abspath], cwd=work_dir)
+        sys.exit(0)
+
     app = QApplication(sys.argv)
 
-    app_class, _ = APP_REGISTRY[app_name]
+    app_class = app_config["app_class"]
     window = QWidget()
     window.setWindowTitle(app_name)
     window.resize(600, 480)
