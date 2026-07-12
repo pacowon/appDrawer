@@ -1306,6 +1306,25 @@ class MainWindow(QMainWindow):
         pb = self._tab_path_bars.get(id(container))
         return pb.path if pb else os.getcwd()
 
+    def _get_new_tab_default_path(self):
+        if not hasattr(self, "apps_tab_widget") or self.apps_tab_widget.count() == 0:
+            return os.getcwd()
+
+        current_index = self.apps_tab_widget.currentIndex()
+        if 0 <= current_index < self._plus_tab_index():
+            container = self.apps_tab_widget.widget(current_index)
+            pb = self._tab_path_bars.get(id(container))
+            if pb and pb.path:
+                return pb.path
+
+        for index in range(self._normal_tab_count() - 1, -1, -1):
+            container = self.apps_tab_widget.widget(index)
+            pb = self._tab_path_bars.get(id(container))
+            if pb and pb.path:
+                return pb.path
+
+        return os.getcwd()
+
     def _plus_tab_index(self):
         return self.apps_tab_widget.count() - 1
 
@@ -1327,6 +1346,7 @@ class MainWindow(QMainWindow):
 
     def add_new_app_tab(self, tab_name):
         # 탭 전체를 감싸는 컨테이너 (그리드 + PathBar)
+        initial_path = self._get_new_tab_default_path()
         tab_container = QWidget()
         tab_container.setObjectName("app_tab_container")
         tab_container.setProperty("default_tab_name", tab_name)
@@ -1358,7 +1378,7 @@ class MainWindow(QMainWindow):
         tab_stack.addWidget(grid_page)
 
         # 탭별 PathBar
-        path_bar = PathBar()
+        path_bar = PathBar(initial_path=initial_path)
         self._tab_path_bars[id(tab_stack)] = path_bar
         self._tab_path_bars[id(tab_container)] = path_bar   # container로도 조회 가능
         # tab_stack → tab_container 역방향 매핑 (탭 인덱스 조회용)
