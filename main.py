@@ -850,17 +850,6 @@ class MainWindow(QMainWindow):
     def apply_theme(self, theme_name):
         self.current_theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.current_theme_name]
-        arrow_variant = "light" if self.current_theme_name == "dark" else "dark"
-        arrow_up_icon = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "assets",
-            f"spin_up_{arrow_variant}.svg",
-        ).replace("\\", "/")
-        arrow_down_icon = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "assets",
-            f"spin_down_{arrow_variant}.svg",
-        ).replace("\\", "/")
 
         self.setStyleSheet(f"""
             QMainWindow, QWidget#centralwidget {{
@@ -880,62 +869,20 @@ class MainWindow(QMainWindow):
             QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QListWidget {{
                 background-color: {colors['input_bg']};
                 color: {colors['text']};
-                border: 1px solid {colors['border']};
-                border-radius: 8px;
-                padding: 8px 10px;
                 selection-background-color: {colors['accent']};
                 selection-color: #ffffff;
             }}
             QComboBox {{
                 background-color: {colors['input_bg']};
                 color: {colors['text']};
-                border: 1px solid {colors['border']};
                 selection-background-color: {colors['accent']};
                 selection-color: #ffffff;
             }}
             QComboBox QAbstractItemView {{
                 background-color: {colors['input_bg']};
                 color: {colors['text']};
-                border: 1px solid {colors['border']};
                 selection-background-color: {colors['accent']};
                 selection-color: #ffffff;
-            }}
-            QSpinBox, QDoubleSpinBox, QDateEdit {{
-                padding-right: 28px;
-            }}
-            QSpinBox::up-button, QDoubleSpinBox::up-button, QDateEdit::up-button {{
-                subcontrol-origin: border;
-                subcontrol-position: top right;
-                width: 22px;
-                background-color: {colors['panel_alt_bg']};
-                border-left: 1px solid {colors['border']};
-                border-bottom: 1px solid {colors['border']};
-                border-top-right-radius: 8px;
-            }}
-            QSpinBox::down-button, QDoubleSpinBox::down-button, QDateEdit::down-button {{
-                subcontrol-origin: border;
-                subcontrol-position: bottom right;
-                width: 22px;
-                background-color: {colors['panel_alt_bg']};
-                border-left: 1px solid {colors['border']};
-                border-top: 1px solid {colors['border']};
-                border-bottom-right-radius: 8px;
-            }}
-            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover, QDateEdit::up-button:hover,
-            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover, QDateEdit::down-button:hover {{
-                background-color: {colors['card_hover_bg']};
-            }}
-            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QDateEdit::up-arrow,
-            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QDateEdit::down-arrow {{
-                width: 12px;
-                height: 12px;
-                background: transparent;
-            }}
-            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QDateEdit::up-arrow {{
-                image: url({arrow_up_icon});
-            }}
-            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QDateEdit::down-arrow {{
-                image: url({arrow_down_icon});
             }}
             QLineEdit[readOnly="true"], QTextEdit[readOnly="true"], QPlainTextEdit[readOnly="true"] {{
                 background-color: {colors['panel_alt_bg']};
@@ -943,27 +890,17 @@ class MainWindow(QMainWindow):
             QLineEdit::placeholder, QTextEdit::placeholder, QPlainTextEdit::placeholder {{
                 color: {colors['muted_text']};
             }}
-            QComboBox::down-arrow {{
-                image: url({arrow_down_icon});
-            }}
             QCheckBox {{
                 color: {colors['text']};
-                spacing: 8px;
             }}
             QCheckBox::indicator {{
-                width: 16px;
-                height: 16px;
-                border: 1px solid {colors['border']};
-                border-radius: 4px;
                 background-color: {colors['input_bg']};
             }}
             QCheckBox::indicator:hover {{
                 background-color: {colors['panel_alt_bg']};
-                border: 1px solid {colors['accent']};
             }}
             QCheckBox::indicator:checked {{
                 background-color: {colors['accent']};
-                border: 1px solid {colors['accent']};
             }}
             QListWidget::item:selected {{
                 background-color: {colors['accent']};
@@ -973,23 +910,12 @@ class MainWindow(QMainWindow):
                 background-color: {colors['input_bg']};
                 alternate-background-color: {colors['panel_alt_bg']};
                 color: {colors['text']};
-                border: 1px solid {colors['border']};
-                gridline-color: {colors['border']};
-                outline: 0;
                 selection-background-color: {colors['accent']};
                 selection-color: #ffffff;
             }}
             QTableCornerButton::section, QHeaderView::section {{
                 background-color: {colors['panel_alt_bg']};
                 color: {colors['text']};
-                border: none;
-                border-bottom: 1px solid {colors['border']};
-                padding: 8px;
-                font-weight: bold;
-            }}
-            QTableWidget::item {{
-                padding: 8px;
-                border-bottom: 1px solid {colors['border']};
             }}
             QMessageBox {{
                 background-color: {colors['panel_bg']};
@@ -1001,10 +927,6 @@ class MainWindow(QMainWindow):
             QMessageBox QPushButton {{
                 background-color: {colors['panel_alt_bg']};
                 color: {colors['text']};
-                border: 1px solid {colors['border']};
-                border-radius: 8px;
-                padding: 8px 16px;
-                min-width: 72px;
             }}
             QMessageBox QPushButton:hover {{
                 background-color: {colors['card_hover_bg']};
