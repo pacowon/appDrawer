@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 CountMixin: 서브프로세스로 1~20 카운트를 실행하고
 QTimer로 stdout을 폴링해 UI 레이블에 표시.

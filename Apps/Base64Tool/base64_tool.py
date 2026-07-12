@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os, sys, base64
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit
 from PyQt5.QtCore import Qt

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import sys
 import os
 import json
@@ -9,7 +10,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QScrollArea, QGridLayout, QDialog, QStackedWidget,
                              QTabWidget, QTabBar, QGroupBox, QTableWidget,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
-                             QLineEdit)
+                             QLineEdit, QSpinBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
 from PyQt5.QtGui import QFont, QDrag, QPixmap, QPainter, QColor
 from PyQt5.uic import loadUi
@@ -24,7 +25,13 @@ THEME_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_theme.jso
 USAGE_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_usage.json")
 GROUPS_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_groups.json")
 GROUP_ASSIGNMENTS_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_group_assignments.json")
+LAYOUT_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_layout.json")
 MAX_USAGE_HISTORY = 500
+
+DEFAULT_LAYOUT_SETTINGS = {
+    "max_columns": 5,
+    "badge_size": 130,
+}
 
 def save_order(order):
     try:
@@ -213,43 +220,83 @@ def save_group_assignments(assignments):
         print(f"[save_group_assignments error] {e}")
 
 
+def _sanitize_layout_settings(data):
+    settings = dict(DEFAULT_LAYOUT_SETTINGS)
+    if isinstance(data, dict):
+        try:
+            settings["max_columns"] = max(2, min(10, int(data.get("max_columns", settings["max_columns"]))))
+        except Exception:
+            pass
+        try:
+            settings["badge_size"] = max(96, min(200, int(data.get("badge_size", settings["badge_size"]))))
+        except Exception:
+            pass
+    return settings
+
+
+def load_layout_settings():
+    if not os.path.exists(LAYOUT_FILE):
+        return dict(DEFAULT_LAYOUT_SETTINGS)
+    try:
+        with open(LAYOUT_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return _sanitize_layout_settings(data)
+    except Exception:
+        return dict(DEFAULT_LAYOUT_SETTINGS)
+
+
+def save_layout_settings(settings):
+    try:
+        os.makedirs(os.path.dirname(LAYOUT_FILE), exist_ok=True)
+        with open(LAYOUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(_sanitize_layout_settings(settings), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[save_layout_settings error] {e}")
+
+
 # ── 앱 카드 ────────────────────────────────────────────────
 class AppCard(QFrame):
     clicked = pyqtSignal(str)
     rightClicked = pyqtSignal(str)
 
-    def __init__(self, app_name, app_class, icon="??"):
+    def __init__(self, app_name, app_class, icon="??", badge_size=130):
         super().__init__()
         self.app_name = app_name
         self.app_class = app_class
         self.icon = icon
+        self.badge_size = badge_size
         self._drag_start_pos = None
         self.theme_name = "light"
         self._setup_ui()
 
     def _setup_ui(self):
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-        self.setFixedSize(130, 130)
+        self.setFixedSize(self.badge_size, self.badge_size)
         self.setCursor(Qt.PointingHandCursor)
         self.setAcceptDrops(False)
 
         bg = app_color(self.app_name)
+        badge_diameter = max(48, int(self.badge_size * 0.5))
+        badge_font_size = max(18, int(self.badge_size * 0.16))
+        name_font_size = max(9, int(self.badge_size * 0.08))
+        margin = max(10, int(self.badge_size * 0.08))
+        spacing = max(4, int(self.badge_size * 0.03))
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(4)
+        layout.setContentsMargins(margin, margin, margin, margin)
+        layout.setSpacing(spacing)
 
         badge = QLabel(self.icon)
         badge.setAlignment(Qt.AlignCenter)
-        badge.setFixedSize(64, 64)
-        badge.setFont(QFont("Arial", 20, QFont.Bold))
+        badge.setFixedSize(badge_diameter, badge_diameter)
+        badge.setFont(QFont("Arial", badge_font_size, QFont.Bold))
         badge.setStyleSheet(
-            f"QLabel{{background-color:{bg};color:white;border-radius:32px;}}"
+            f"QLabel{{background-color:{bg};color:white;border-radius:{badge_diameter // 2}px;}}"
         )
 
         name_lbl = QLabel(self.app_name)
         name_lbl.setAlignment(Qt.AlignCenter)
-        name_lbl.setFont(QFont("Arial", 10))
+        name_lbl.setFont(QFont("Arial", name_font_size))
         name_lbl.setWordWrap(True)
 
         layout.addWidget(badge, 0, Qt.AlignHCenter)
@@ -314,7 +361,7 @@ class AppCard(QFrame):
 
 # ── 앱 그리드 ──────────────────────────────────────────────
 class AppGrid(QWidget):
-    def __init__(self, apps, app_group_assignments, group_names, on_click, on_right_click):
+    def __init__(self, apps, app_group_assignments, group_names, on_click, on_right_click, layout_settings=None):
         super().__init__()
         self.apps = apps
         self.app_group_assignments = app_group_assignments
@@ -322,6 +369,7 @@ class AppGrid(QWidget):
         self.app_order = load_order(list(apps.keys()))
         self.on_click = on_click
         self.on_right_click = on_right_click
+        self.layout_settings = _sanitize_layout_settings(layout_settings or DEFAULT_LAYOUT_SETTINGS)
         self.theme_name = "light"
         self.cards = []
         self.group_labels = []
@@ -342,7 +390,11 @@ class AppGrid(QWidget):
         self.group_labels = []
         self.group_sections = []
         self.section_widgets = []
-        cols = 5
+        cols = self.layout_settings["max_columns"]
+        card_size = self.layout_settings["badge_size"]
+        header_font_size = max(14, int(card_size * 0.12))
+        h_spacing = max(12, int(card_size * 0.15))
+        v_spacing = max(12, int(card_size * 0.12))
 
         for group_index, group_name in enumerate(self.group_names):
             last_index = len(self.group_names) - 1
@@ -353,7 +405,7 @@ class AppGrid(QWidget):
 
             header = QLabel(group_name)
             header.setObjectName("group_header")
-            header.setFont(QFont("Arial", 16, QFont.Bold))
+            header.setFont(QFont("Arial", header_font_size, QFont.Bold))
             self.group_labels.append(header)
             self.group_sections.append((group_index, header))
             self.main_layout.addWidget(header)
@@ -362,13 +414,13 @@ class AppGrid(QWidget):
             section.setObjectName("group_section")
             self.section_widgets.append(section)
             section_layout = QGridLayout(section)
-            section_layout.setHorizontalSpacing(20)
-            section_layout.setVerticalSpacing(16)
+            section_layout.setHorizontalSpacing(h_spacing)
+            section_layout.setVerticalSpacing(v_spacing)
             section_layout.setContentsMargins(0, 0, 0, 0)
 
             for i, name in enumerate(group_apps):
                 cls, icon = self.apps[name]
-                card = AppCard(name, cls, icon)
+                card = AppCard(name, cls, icon, badge_size=card_size)
                 card.clicked.connect(self.on_click)
                 card.rightClicked.connect(self.on_right_click)
                 self.cards.append(card)
@@ -489,6 +541,10 @@ class AppGrid(QWidget):
         self.group_names = sanitize_group_names(group_names)
         self.rebuild_grid()
 
+    def update_layout_settings(self, layout_settings):
+        self.layout_settings = _sanitize_layout_settings(layout_settings)
+        self.rebuild_grid()
+
 
 # ── 사이드바 버튼 ───────────────────────────────────────────
 class SidebarButton(QPushButton):
@@ -523,6 +579,7 @@ class MainWindow(QMainWindow):
         self.app_group_assignments = load_group_assignments(self.apps.keys())
         self.group_names = load_group_names()
         self.applied_group_names = list(self.group_names)
+        self.layout_settings = load_layout_settings()
         self.setup_ui()
 
     def setup_ui(self):
@@ -568,9 +625,48 @@ class MainWindow(QMainWindow):
         self.settings_layout.addStretch()
         self.settings_layout.addWidget(panel)
         self.settings_layout.addSpacing(18)
+        self.settings_layout.addWidget(self._build_layout_panel())
+        self.settings_layout.addSpacing(18)
         self.settings_layout.addWidget(self._build_groups_panel())
         self.settings_layout.addStretch()
         self.settings_panel = panel
+
+    def _build_layout_panel(self):
+        panel = QGroupBox("Layout")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 26, 20, 20)
+        layout.setSpacing(12)
+
+        cols_row = QHBoxLayout()
+        cols_row.setSpacing(10)
+        cols_label = QLabel("Max Apps Per Row")
+        self.columns_spin = QSpinBox()
+        self.columns_spin.setRange(2, 10)
+        self.columns_spin.setValue(self.layout_settings["max_columns"])
+        cols_row.addWidget(cols_label)
+        cols_row.addStretch()
+        cols_row.addWidget(self.columns_spin)
+
+        size_row = QHBoxLayout()
+        size_row.setSpacing(10)
+        size_label = QLabel("Badge Size")
+        self.badge_size_spin = QSpinBox()
+        self.badge_size_spin.setRange(96, 200)
+        self.badge_size_spin.setSingleStep(4)
+        self.badge_size_spin.setValue(self.layout_settings["badge_size"])
+        size_row.addWidget(size_label)
+        size_row.addStretch()
+        size_row.addWidget(self.badge_size_spin)
+
+        self.apply_layout_btn = QPushButton("Apply")
+        self.apply_layout_btn.clicked.connect(self.apply_layout_settings)
+
+        layout.addLayout(cols_row)
+        layout.addLayout(size_row)
+        layout.addWidget(self.apply_layout_btn, 0, Qt.AlignRight)
+
+        self.layout_panel = panel
+        return panel
 
     def _build_groups_panel(self):
         panel = QGroupBox("Groups")
@@ -667,6 +763,18 @@ class MainWindow(QMainWindow):
         self.rebuild_group_fields()
         self.apply_theme(self.current_theme_name)
 
+    def apply_layout_settings(self):
+        self.layout_settings = _sanitize_layout_settings(
+            {
+                "max_columns": self.columns_spin.value(),
+                "badge_size": self.badge_size_spin.value(),
+            }
+        )
+        save_layout_settings(self.layout_settings)
+        for grid in self.findChildren(AppGrid):
+            grid.update_layout_settings(self.layout_settings)
+        self.apply_theme(self.current_theme_name)
+
     def on_theme_button_clicked(self, theme_name):
         self.apply_theme(theme_name)
         save_theme(theme_name)
@@ -742,6 +850,17 @@ class MainWindow(QMainWindow):
     def apply_theme(self, theme_name):
         self.current_theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.current_theme_name]
+        arrow_variant = "light" if self.current_theme_name == "dark" else "dark"
+        arrow_up_icon = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "assets",
+            f"spin_up_{arrow_variant}.svg",
+        ).replace("\\", "/")
+        arrow_down_icon = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "assets",
+            f"spin_down_{arrow_variant}.svg",
+        ).replace("\\", "/")
 
         self.setStyleSheet(f"""
             QMainWindow, QWidget#centralwidget {{
@@ -766,6 +885,43 @@ class MainWindow(QMainWindow):
                 padding: 8px 10px;
                 selection-background-color: {colors['accent']};
                 selection-color: #ffffff;
+            }}
+            QSpinBox, QDoubleSpinBox, QDateEdit {{
+                padding-right: 28px;
+            }}
+            QSpinBox::up-button, QDoubleSpinBox::up-button, QDateEdit::up-button {{
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 22px;
+                background-color: {colors['panel_alt_bg']};
+                border-left: 1px solid {colors['border']};
+                border-bottom: 1px solid {colors['border']};
+                border-top-right-radius: 8px;
+            }}
+            QSpinBox::down-button, QDoubleSpinBox::down-button, QDateEdit::down-button {{
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 22px;
+                background-color: {colors['panel_alt_bg']};
+                border-left: 1px solid {colors['border']};
+                border-top: 1px solid {colors['border']};
+                border-bottom-right-radius: 8px;
+            }}
+            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover, QDateEdit::up-button:hover,
+            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover, QDateEdit::down-button:hover {{
+                background-color: {colors['card_hover_bg']};
+            }}
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QDateEdit::up-arrow,
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QDateEdit::down-arrow {{
+                width: 12px;
+                height: 12px;
+                background: transparent;
+            }}
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QDateEdit::up-arrow {{
+                image: url({arrow_up_icon});
+            }}
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QDateEdit::down-arrow {{
+                image: url({arrow_down_icon});
             }}
             QLineEdit[readOnly="true"], QTextEdit[readOnly="true"], QPlainTextEdit[readOnly="true"] {{
                 background-color: {colors['panel_alt_bg']};
@@ -926,6 +1082,28 @@ class MainWindow(QMainWindow):
                     background-color: {colors['panel_bg']};
                 }}
             """)
+        if hasattr(self, "layout_panel"):
+            self.layout_panel.setStyleSheet(f"""
+                QGroupBox {{
+                    background-color: {colors['panel_bg']};
+                    border: 1px solid {colors['border']};
+                    border-radius: 14px;
+                    color: {colors['text']};
+                    font-size: 15px;
+                    font-weight: bold;
+                    padding-top: 12px;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 18px;
+                    top: 10px;
+                    padding: 0 8px;
+                    background-color: {colors['panel_bg']};
+                }}
+                QLabel {{
+                    color: {colors['text']};
+                }}
+            """)
         if hasattr(self, "groups_panel"):
             self.groups_panel.setStyleSheet(f"""
                 QGroupBox {{
@@ -972,6 +1150,21 @@ class MainWindow(QMainWindow):
                         color: {colors['muted_text']};
                     }}
                 """)
+        if hasattr(self, "apply_layout_btn"):
+            self.apply_layout_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent']};
+                    color: #ffffff;
+                    border: 1px solid {colors['accent']};
+                    border-radius: 10px;
+                    padding: 10px 14px;
+                    font-size: 12px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {colors['accent_hover']};
+                }}
+            """)
         if hasattr(self, "profile_panel"):
             self.profile_panel.setStyleSheet(f"""
                 QGroupBox {{
@@ -1125,7 +1318,8 @@ class MainWindow(QMainWindow):
             self.app_group_assignments,
             self.group_names,
             on_click=lambda name, s=tab_stack, t=tab_name: self.launch_app_in_tab(name, s, t),
-            on_right_click=self.launch_app_popup
+            on_right_click=self.launch_app_popup,
+            layout_settings=self.layout_settings,
         )
         app_grid.set_theme(self.current_theme_name)
         scroll.setWidget(app_grid)
@@ -1196,20 +1390,26 @@ class MainWindow(QMainWindow):
         try:
             os.chdir(target_path)
             app_widget = self.apps[app_name][0]()
+            if hasattr(app_widget, "set_path_provider"):
+                app_widget.set_path_provider(lambda s=tab_stack: self._get_tab_path(s))
+
+            app_layout.addWidget(back_btn)
+            app_layout.addWidget(app_widget, 1)
+            while tab_stack.count() > 1:
+                w = tab_stack.widget(1)
+                tab_stack.removeWidget(w)
+                w.deleteLater()
+            tab_stack.addWidget(app_page)
+            tab_stack.setCurrentIndex(1)
+        except Exception as e:
+            print(f"[launch_app_in_tab fallback] {app_name}: {e}")
+            if tab_index >= 0:
+                self.apps_tab_widget.setTabText(tab_index, original_tab_name)
+            if path_bar:
+                path_bar.apply_theme(THEMES[self.current_theme_name], disabled=False)
+            self.launch_app_popup(app_name, work_dir=target_path)
         finally:
             os.chdir(previous_cwd)
-
-        if hasattr(app_widget, "set_path_provider"):
-            app_widget.set_path_provider(lambda s=tab_stack: self._get_tab_path(s))
-
-        app_layout.addWidget(back_btn)
-        app_layout.addWidget(app_widget, 1)
-        while tab_stack.count() > 1:
-            w = tab_stack.widget(1)
-            tab_stack.removeWidget(w)
-            w.deleteLater()
-        tab_stack.addWidget(app_page)
-        tab_stack.setCurrentIndex(1)
 
     def on_tab_changed(self, index):
         if index == self._plus_tab_index():
@@ -1286,9 +1486,9 @@ class MainWindow(QMainWindow):
         event.accept()
         QApplication.instance().quit()
 
-    def launch_app_popup(self, app_name):
+    def launch_app_popup(self, app_name, work_dir=None):
         """우클릭: 완전히 독립된 별도 프로세스로 앱 실행"""
-        work_dir = self._get_active_tab_path()
+        work_dir = work_dir or self._get_active_tab_path()
         record_app_usage(app_name, "popup")
         launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'run_app.py')
         subprocess.Popen(

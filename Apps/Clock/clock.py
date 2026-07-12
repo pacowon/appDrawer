@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os, sys
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import QTimer, QDateTime
