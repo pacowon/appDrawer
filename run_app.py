@@ -40,6 +40,17 @@ def main():
         )
         subprocess.Popen([sys.executable, script_abspath], cwd=work_dir)
         sys.exit(0)
+    if app_config["type"] == "command":
+        command = app_config.get("command")
+        if not command:
+            print(f"Command is missing for app: {app_name}")
+            sys.exit(1)
+
+        if os.name == "nt":
+            subprocess.Popen(command, cwd=work_dir, shell=True)
+        else:
+            subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir)
+        sys.exit(0)
 
     app = QApplication(sys.argv)
 

@@ -1460,7 +1460,7 @@ class MainWindow(QMainWindow):
         if tab_index >= 0:
             self.apps_tab_widget.setTabText(tab_index, app_name)
         app_config = get_app_config(self.apps[app_name])
-        if app_config["type"] == "script":
+        if app_config["type"] in {"script", "command"}:
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack))
