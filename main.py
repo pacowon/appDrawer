@@ -877,12 +877,26 @@ class MainWindow(QMainWindow):
             QFrame {{
                 color: {colors['text']};
             }}
-            QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox, QListWidget {{
+            QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QListWidget {{
                 background-color: {colors['input_bg']};
                 color: {colors['text']};
                 border: 1px solid {colors['border']};
                 border-radius: 8px;
                 padding: 8px 10px;
+                selection-background-color: {colors['accent']};
+                selection-color: #ffffff;
+            }}
+            QComboBox {{
+                background-color: {colors['input_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                selection-background-color: {colors['accent']};
+                selection-color: #ffffff;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {colors['input_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
                 selection-background-color: {colors['accent']};
                 selection-color: #ffffff;
             }}
@@ -929,10 +943,27 @@ class MainWindow(QMainWindow):
             QLineEdit::placeholder, QTextEdit::placeholder, QPlainTextEdit::placeholder {{
                 color: {colors['muted_text']};
             }}
-            QComboBox::drop-down {{
-                border: none;
-                background: transparent;
-                padding-right: 6px;
+            QComboBox::down-arrow {{
+                image: url({arrow_down_icon});
+            }}
+            QCheckBox {{
+                color: {colors['text']};
+                spacing: 8px;
+            }}
+            QCheckBox::indicator {{
+                width: 16px;
+                height: 16px;
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                background-color: {colors['input_bg']};
+            }}
+            QCheckBox::indicator:hover {{
+                background-color: {colors['panel_alt_bg']};
+                border: 1px solid {colors['accent']};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {colors['accent']};
+                border: 1px solid {colors['accent']};
             }}
             QListWidget::item:selected {{
                 background-color: {colors['accent']};
