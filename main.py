@@ -386,12 +386,13 @@ class AppCard(QFrame):
     clicked = pyqtSignal(str)
     rightClicked = pyqtSignal(str)
 
-    def __init__(self, app_name, app_class, icon="??", badge_size=130):
+    def __init__(self, app_name, app_class, icon="??", badge_size=130, app_type="widget"):
         super().__init__()
         self.app_name = app_name
         self.app_class = app_class
         self.icon = icon
         self.badge_size = badge_size
+        self.app_type = app_type
         self._drag_start_pos = None
         self.theme_name = "light"
         self._setup_ui()
@@ -433,6 +434,8 @@ class AppCard(QFrame):
 
     def _apply_style(self, dragging):
         colors = THEMES[self.theme_name]
+        base_border = colors["accent"] if self.app_type in {"script", "command"} else colors["card_border"]
+        hover_border = colors["accent_hover"] if self.app_type in {"script", "command"} else colors["card_hover_border"]
         if dragging:
             self.setStyleSheet(
                 f"AppCard{{background-color:{colors['panel_alt_bg']};"
@@ -441,10 +444,10 @@ class AppCard(QFrame):
         else:
             self.setStyleSheet(
                 f"AppCard{{background-color:{colors['card_bg']};"
-                f"border-radius:10px;border:2px solid {colors['card_border']};"
+                f"border-radius:10px;border:2px solid {base_border};"
                 f"color:{colors['text']};}}"
                 f"AppCard:hover{{background-color:{colors['card_hover_bg']};"
-                f"border:2px solid {colors['card_hover_border']};}}"
+                f"border:2px solid {hover_border};}}"
             )
 
     def set_theme(self, theme_name):
@@ -547,7 +550,13 @@ class AppGrid(QWidget):
 
             for i, name in enumerate(group_apps):
                 config = get_app_config(self.apps[name])
-                card = AppCard(name, config.get("app_class"), config["icon"], badge_size=card_size)
+                card = AppCard(
+                    name,
+                    config.get("app_class"),
+                    config["icon"],
+                    badge_size=card_size,
+                    app_type=config["type"],
+                )
                 card.clicked.connect(self.on_click)
                 card.rightClicked.connect(self.on_right_click)
                 self.cards.append(card)
@@ -716,6 +725,7 @@ class MainWindow(QMainWindow):
         self.btn_settings.clicked.connect(self.show_settings)
         self.btn_profile.clicked.connect(self.show_profile)
         self.toggle_btn.clicked.connect(self.toggle_sidebar)
+        self.toggle_btn.clicked.connect(self._apply_sidebar_button_styles)
         self.setup_apps_tabs()
         self.setup_settings_page()
         self.setup_profile_page()
@@ -1135,25 +1145,7 @@ class MainWindow(QMainWindow):
                 background-color: {colors['sidebar_hover']};
             }}
         """)
-        sidebar_button_style = f"""
-            QPushButton {{
-                text-align: left;
-                padding: 15px;
-                border: none;
-                background-color: transparent;
-                color: {colors['sidebar_text']};
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {colors['sidebar_hover']};
-            }}
-            QPushButton:checked {{
-                background-color: {colors['sidebar_checked']};
-            }}
-        """
-        self.btn_apps.setStyleSheet(sidebar_button_style)
-        self.btn_settings.setStyleSheet(sidebar_button_style)
-        self.btn_profile.setStyleSheet(sidebar_button_style)
+        self._apply_sidebar_button_styles()
 
         if hasattr(self, "settings_panel"):
             self.settings_panel.setStyleSheet(f"""
@@ -1337,6 +1329,46 @@ class MainWindow(QMainWindow):
             if isinstance(path_bar, PathBar):
                 path_bar.apply_theme(colors, disabled=not path_bar.isEnabled())
 
+    def _apply_sidebar_button_styles(self):
+        colors = THEMES[self.current_theme_name]
+        if self.sidebar_expanded:
+            style = f"""
+                QPushButton {{
+                    text-align: left;
+                    padding: 15px;
+                    border: none;
+                    background-color: transparent;
+                    color: {colors['sidebar_text']};
+                    font-size: 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: {colors['sidebar_hover']};
+                }}
+                QPushButton:checked {{
+                    background-color: {colors['sidebar_checked']};
+                }}
+            """
+        else:
+            style = f"""
+                QPushButton {{
+                    text-align: center;
+                    padding: 0px;
+                    border: none;
+                    background-color: transparent;
+                    color: {colors['sidebar_text']};
+                    font-size: 18px;
+                }}
+                QPushButton:hover {{
+                    background-color: {colors['sidebar_hover']};
+                }}
+                QPushButton:checked {{
+                    background-color: {colors['sidebar_checked']};
+                }}
+            """
+        self.btn_apps.setStyleSheet(style)
+        self.btn_settings.setStyleSheet(style)
+        self.btn_profile.setStyleSheet(style)
+
     def setup_apps_tabs(self):
         while self.apps_page_layout.count():
             child = self.apps_page_layout.takeAt(0)
@@ -1453,17 +1485,21 @@ class MainWindow(QMainWindow):
         self.apps_tab_widget.setCurrentIndex(idx)
         self._renumber_app_list_tabs()
 
+    def _log_app_click(self, app_name):
+        print(f"{app_name} Clicked. Run App")
+
     def launch_app_in_tab(self, app_name, tab_stack, original_tab_name):
         # tab_container 기준으로 탭 인덱스 찾기
         tab_container = self._stack_to_container.get(id(tab_stack))
         tab_index = self.apps_tab_widget.indexOf(tab_container) if tab_container else -1
         if tab_index >= 0:
             self.apps_tab_widget.setTabText(tab_index, app_name)
+        self._log_app_click(app_name)
         app_config = get_app_config(self.apps[app_name])
         if app_config["type"] in {"script", "command"}:
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
-            self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack))
+            self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack), log_click=False)
             return
         record_app_usage(app_name, "tab")
         app_page = QWidget()
@@ -1525,7 +1561,7 @@ class MainWindow(QMainWindow):
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             if path_bar:
                 path_bar.apply_theme(THEMES[self.current_theme_name], disabled=False)
-            self.launch_app_popup(app_name, work_dir=target_path)
+            self.launch_app_popup(app_name, work_dir=target_path, log_click=False)
         finally:
             os.chdir(previous_cwd)
 
@@ -1604,9 +1640,11 @@ class MainWindow(QMainWindow):
         event.accept()
         QApplication.instance().quit()
 
-    def launch_app_popup(self, app_name, work_dir=None):
+    def launch_app_popup(self, app_name, work_dir=None, log_click=True):
         """우클릭: 완전히 독립된 별도 프로세스로 앱 실행"""
         work_dir = work_dir or self._get_active_tab_path()
+        if log_click:
+            self._log_app_click(app_name)
         record_app_usage(app_name, "popup")
         launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'run_app.py')
         subprocess.Popen(
