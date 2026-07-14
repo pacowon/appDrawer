@@ -7,6 +7,7 @@ import hashlib
 import re
 import shutil
 import shlex
+import ctypes
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
@@ -17,7 +18,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTabWidget, QTabBar, QGroupBox, QTableWidget,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier, QEvent
 from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor
 from PyQt5.uic import loadUi
 
@@ -971,6 +972,7 @@ class XTermEmbeddedWidget(QWidget):
         self.work_dir = work_dir
         self.theme_name = theme_name if theme_name in THEMES else "light"
         self.process = None
+        self.xterm_window_id = None
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
@@ -989,6 +991,7 @@ class XTermEmbeddedWidget(QWidget):
         self.host.setAttribute(Qt.WA_NativeWindow, True)
         self.host.setFocusPolicy(Qt.StrongFocus)
         self.host.setMinimumHeight(360)
+        self.host.installEventFilter(self)
         layout.addWidget(self.host, 1)
         self.setFocusProxy(self.host)
 
@@ -1045,8 +1048,103 @@ class XTermEmbeddedWidget(QWidget):
         try:
             self.process = subprocess.Popen(["xterm"] + args, cwd=self.work_dir, env=env)
             self.host.setFocus()
+            for delay in (200, 500, 1000):
+                QTimer.singleShot(delay, self._sync_xterm_size)
         except Exception as exc:
             print(f"[xterm embed error] {exc}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._sync_xterm_size)
+
+    def eventFilter(self, obj, event):
+        if obj is self.host and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._sync_xterm_size)
+        return super().eventFilter(obj, event)
+
+    def _x11_display(self):
+        try:
+            x11 = ctypes.cdll.LoadLibrary("libX11.so.6")
+            x11.XOpenDisplay.restype = ctypes.c_void_p
+            x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+            x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+            x11.XFlush.argtypes = [ctypes.c_void_p]
+            x11.XFree.argtypes = [ctypes.c_void_p]
+            x11.XQueryTree.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_ulong,
+                ctypes.POINTER(ctypes.c_ulong),
+                ctypes.POINTER(ctypes.c_ulong),
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_ulong)),
+                ctypes.POINTER(ctypes.c_uint),
+            ]
+            x11.XQueryTree.restype = ctypes.c_int
+            x11.XResizeWindow.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_ulong,
+                ctypes.c_uint,
+                ctypes.c_uint,
+            ]
+            display = x11.XOpenDisplay(None)
+            if not display:
+                return None, None
+            return x11, display
+        except Exception:
+            return None, None
+
+    def _find_xterm_window(self):
+        if self.xterm_window_id:
+            return self.xterm_window_id
+
+        x11, display = self._x11_display()
+        if not display:
+            return None
+
+        try:
+            parent = ctypes.c_ulong(int(self.host.winId()))
+            root = ctypes.c_ulong()
+            parent_return = ctypes.c_ulong()
+            children = ctypes.POINTER(ctypes.c_ulong)()
+            nchildren = ctypes.c_uint()
+            ok = x11.XQueryTree(
+                ctypes.c_void_p(display),
+                parent,
+                ctypes.byref(root),
+                ctypes.byref(parent_return),
+                ctypes.byref(children),
+                ctypes.byref(nchildren),
+            )
+            if ok and nchildren.value:
+                self.xterm_window_id = int(children[nchildren.value - 1])
+            if children:
+                x11.XFree(children)
+        finally:
+            x11.XCloseDisplay(ctypes.c_void_p(display))
+
+        return self.xterm_window_id
+
+    def _resize_x11_window(self, window_id, width, height):
+        x11, display = self._x11_display()
+        if not display:
+            return
+        try:
+            x11.XResizeWindow(
+                ctypes.c_void_p(display),
+                ctypes.c_ulong(window_id),
+                ctypes.c_uint(max(1, width)),
+                ctypes.c_uint(max(1, height)),
+            )
+            x11.XFlush(ctypes.c_void_p(display))
+        finally:
+            x11.XCloseDisplay(ctypes.c_void_p(display))
+
+    def _sync_xterm_size(self):
+        if not self.process or self.process.poll() is not None:
+            return
+        window_id = self._find_xterm_window()
+        if not window_id:
+            return
+        self._resize_x11_window(window_id, self.host.width(), self.host.height())
 
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
