@@ -434,8 +434,9 @@ class AppCard(QFrame):
 
     def _apply_style(self, dragging):
         colors = THEMES[self.theme_name]
-        base_border = colors["accent"] if self.app_type in {"script", "command"} else colors["card_border"]
-        hover_border = colors["accent_hover"] if self.app_type in {"script", "command"} else colors["card_hover_border"]
+        external_types = {"script", "command", "terminal"}
+        base_border = colors["accent"] if self.app_type in external_types else colors["card_border"]
+        hover_border = colors["accent_hover"] if self.app_type in external_types else colors["card_hover_border"]
         if dragging:
             self.setStyleSheet(
                 f"AppCard{{background-color:{colors['panel_alt_bg']};"
@@ -1480,7 +1481,7 @@ class MainWindow(QMainWindow):
             self.apps_tab_widget.setTabText(tab_index, app_name)
         self._log_app_click(app_name)
         app_config = get_app_config(self.apps[app_name])
-        if app_config["type"] in {"script", "command"}:
+        if app_config["type"] in {"script", "command", "terminal"}:
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack), log_click=False)

@@ -6,6 +6,7 @@
 import sys
 import os
 import subprocess
+import shutil
 
 
 def run_shell_command(command, work_dir):
@@ -13,6 +14,35 @@ def run_shell_command(command, work_dir):
         subprocess.Popen(command, cwd=work_dir, shell=True)
     else:
         subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir)
+
+
+def run_terminal_command(command, work_dir):
+    if os.name == "nt":
+        subprocess.Popen(f'start cmd /k "{command}"', cwd=work_dir, shell=True)
+        return
+
+    terminal = os.environ.get("TERMINAL")
+    if terminal and shutil.which(terminal):
+        subprocess.Popen([terminal, "-e", "bash", "-lc", command], cwd=work_dir)
+        return
+
+    launchers = [
+        ("x-terminal-emulator", ["x-terminal-emulator", "-e", "bash", "-lc", command]),
+        ("gnome-terminal", ["gnome-terminal", "--", "bash", "-lc", command]),
+        ("konsole", ["konsole", "-e", "bash", "-lc", command]),
+        ("xfce4-terminal", ["xfce4-terminal", "-e", f"bash -lc {command!r}"]),
+        ("lxterminal", ["lxterminal", "-e", "bash", "-lc", command]),
+        ("mate-terminal", ["mate-terminal", "--", "bash", "-lc", command]),
+        ("xterm", ["xterm", "-e", "bash", "-lc", command]),
+    ]
+    for executable, args in launchers:
+        if shutil.which(executable):
+            subprocess.Popen(args, cwd=work_dir)
+            return
+
+    print("No supported terminal emulator found; running command without a new terminal.")
+    run_shell_command(command, work_dir)
+
 
 def main():
     if len(sys.argv) < 2:
@@ -60,6 +90,14 @@ def main():
             sys.exit(1)
 
         run_shell_command(command, work_dir)
+        sys.exit(0)
+    if app_config["type"] == "terminal":
+        command = app_config.get("command")
+        if not command:
+            print(f"Terminal command is missing for app: {app_name}")
+            sys.exit(1)
+
+        run_terminal_command(command, work_dir)
         sys.exit(0)
 
     app = QApplication(sys.argv)

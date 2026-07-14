@@ -44,6 +44,14 @@ def command_app(command, icon):
     }
 
 
+def terminal_app(command, icon):
+    return {
+        "type": "terminal",
+        "command": command,
+        "icon": icon,
+    }
+
+
 def get_app_config(app_entry):
     if isinstance(app_entry, tuple):
         app_class, icon = app_entry
@@ -68,6 +76,7 @@ def get_app_config(app_entry):
 # "Some Script App": script_app("Apps/SomeScript/run.py", "SS"),
 # "Some Shell Script": script_app("sh /path/code.sh", "SH"),
 # "Some Command App": command_app("/path/to/launcher -- /path/to/app.py &", "CM"),
+# "Some TUI App": terminal_app("htop", "HT"),
 APP_REGISTRY = {
     "계산기": (CalculatorApp, "CA"),
     "메모장": (NotesApp, "NT"),
