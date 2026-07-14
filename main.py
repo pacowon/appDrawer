@@ -4,6 +4,8 @@ import os
 import json
 import subprocess
 import hashlib
+import shutil
+import shlex
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
@@ -714,6 +716,14 @@ class EmbeddedTerminalWidget(QWidget):
         self.command = command
         self.work_dir = work_dir
         self.theme_name = theme_name if theme_name in THEMES else "light"
+        self.use_embedded_xterm = (
+            os.name != "nt"
+            and bool(os.environ.get("DISPLAY"))
+            and shutil.which("xterm") is not None
+        )
+        self.output = None
+        self.input = None
+        self.terminal_host = None
         self.process = QProcess(self)
         self.process.setWorkingDirectory(work_dir)
         self.process.setProcessChannelMode(QProcess.MergedChannels)
@@ -729,6 +739,14 @@ class EmbeddedTerminalWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
+
+        if self.use_embedded_xterm:
+            self.terminal_host = QWidget()
+            self.terminal_host.setObjectName("embedded_xterm_host")
+            self.terminal_host.setAttribute(Qt.WA_NativeWindow, True)
+            self.terminal_host.setMinimumHeight(320)
+            layout.addWidget(self.terminal_host, 1)
+            return
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
@@ -753,15 +771,63 @@ class EmbeddedTerminalWidget(QWidget):
             return shell
         return "/bin/bash"
 
+    def _terminal_shell_command(self, shell):
+        shell_name = os.path.basename(shell)
+        quoted_shell = shlex.quote(shell)
+        if shell_name == "fish":
+            return (
+                f"{self.command}\n"
+                "set appdrawer_status $status\n"
+                "echo\n"
+                "echo \"[AppDrawer] Command exited with status $appdrawer_status.\"\n"
+                f"exec {quoted_shell} -i"
+            )
+        if shell_name in {"csh", "tcsh"}:
+            return (
+                f"{self.command}\n"
+                "set appdrawer_status = $status\n"
+                "echo\n"
+                "echo \"[AppDrawer] Command exited with status $appdrawer_status.\"\n"
+                f"exec {quoted_shell} -i"
+            )
+        return (
+            f"{self.command}\n"
+            "status=$?\n"
+            "echo\n"
+            "echo \"[AppDrawer] Command exited with status ${status}.\"\n"
+            f"exec {quoted_shell} -i"
+        )
+
     def _start_shell(self):
         shell = self._shell_path()
+        if self.use_embedded_xterm:
+            QTimer.singleShot(0, lambda: self._start_embedded_xterm(shell))
+            return
+
         self._append_output(f"[AppDrawer] Starting shell: {shell}\n")
         self._append_output(f"[AppDrawer] Working directory: {self.work_dir}\n")
         self.process.start(shell, ["-i"])
         if self.command:
             QTimer.singleShot(250, lambda: self._write_command(self.command, show=True))
 
+    def _start_embedded_xterm(self, shell):
+        colors = THEMES[self.theme_name]
+        win_id = int(self.terminal_host.winId())
+        terminal_command = self._terminal_shell_command(shell)
+        args = [
+            "-into", str(win_id),
+            "-fa", "Monospace",
+            "-fs", "10",
+            "-bg", colors["input_bg"],
+            "-fg", colors["text"],
+            "-e", shell, "-ic", terminal_command,
+        ]
+        self.process.start("xterm", args)
+
     def _append_output(self, text):
+        if self.output is None:
+            print(text, end="")
+            return
         self.output.moveCursor(self.output.textCursor().End)
         self.output.insertPlainText(text)
         self.output.moveCursor(self.output.textCursor().End)
@@ -780,6 +846,8 @@ class EmbeddedTerminalWidget(QWidget):
         self.process.write((command + "\n").encode())
 
     def _send_input(self):
+        if self.input is None:
+            return
         command = self.input.text()
         self.input.clear()
         self._write_command(command, show=True)
@@ -816,12 +884,20 @@ class EmbeddedTerminalWidget(QWidget):
                 border-radius: 8px;
                 padding: 8px 10px;
             }}
+            QWidget#embedded_xterm_host {{
+                background-color: {colors['input_bg']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+            }}
         """)
 
     def stop(self):
         if self.process.state() == QProcess.NotRunning:
             return
-        self.process.write(b"exit\n")
+        if self.use_embedded_xterm:
+            self.process.terminate()
+        else:
+            self.process.write(b"exit\n")
         if not self.process.waitForFinished(500):
             self.process.terminate()
         if not self.process.waitForFinished(500):
