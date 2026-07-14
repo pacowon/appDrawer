@@ -77,6 +77,7 @@ def get_app_config(app_entry):
 # "Some Shell Script": script_app("sh /path/code.sh", "SH"),
 # "Some Command App": command_app("/path/to/launcher -- /path/to/app.py &", "CM"),
 # "Some TUI App": terminal_app("htop", "HT"),
+# "GUS Alias": terminal_app("gus", "GU"),
 APP_REGISTRY = {
     "계산기": (CalculatorApp, "CA"),
     "메모장": (NotesApp, "NT"),
