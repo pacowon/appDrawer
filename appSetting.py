@@ -66,6 +66,7 @@ def get_app_config(app_entry):
 
 # Example:
 # "Some Script App": script_app("Apps/SomeScript/run.py", "SS"),
+# "Some Shell Script": script_app("sh /path/code.sh", "SH"),
 # "Some Command App": command_app("/path/to/launcher -- /path/to/app.py &", "CM"),
 APP_REGISTRY = {
     "계산기": (CalculatorApp, "CA"),

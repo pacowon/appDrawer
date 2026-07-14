@@ -7,6 +7,13 @@ import sys
 import os
 import subprocess
 
+
+def run_shell_command(command, work_dir):
+    if os.name == "nt":
+        subprocess.Popen(command, cwd=work_dir, shell=True)
+    else:
+        subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir)
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python run_app.py <app_name> [work_dir]")
@@ -35,10 +42,16 @@ def main():
             print(f"Script path is missing for app: {app_name}")
             sys.exit(1)
 
-        script_abspath = os.path.abspath(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), script_path)
+        app_root = os.path.dirname(os.path.abspath(__file__))
+        script_abspath = (
+            script_path
+            if os.path.isabs(script_path)
+            else os.path.abspath(os.path.join(app_root, script_path))
         )
-        subprocess.Popen([sys.executable, script_abspath], cwd=work_dir)
+        if os.path.isfile(script_abspath):
+            subprocess.Popen([sys.executable, script_abspath], cwd=work_dir)
+        else:
+            run_shell_command(script_path, work_dir)
         sys.exit(0)
     if app_config["type"] == "command":
         command = app_config.get("command")
@@ -46,10 +59,7 @@ def main():
             print(f"Command is missing for app: {app_name}")
             sys.exit(1)
 
-        if os.name == "nt":
-            subprocess.Popen(command, cwd=work_dir, shell=True)
-        else:
-            subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir)
+        run_shell_command(command, work_dir)
         sys.exit(0)
 
     app = QApplication(sys.argv)

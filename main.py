@@ -1029,27 +1029,11 @@ class MainWindow(QMainWindow):
             }}
             QCheckBox {{
                 color: {colors['text']};
+                background-color: {colors['page_bg']};
             }}
             QRadioButton {{
                 color: {colors['text']};
-            }}
-            QCheckBox::indicator {{
-                background-color: {colors['input_bg']};
-            }}
-            QRadioButton::indicator {{
-                background-color: {colors['input_bg']};
-            }}
-            QCheckBox::indicator:hover {{
-                background-color: {colors['panel_alt_bg']};
-            }}
-            QRadioButton::indicator:hover {{
-                background-color: {colors['panel_alt_bg']};
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {colors['accent']};
-            }}
-            QRadioButton::indicator:checked {{
-                background-color: {colors['accent']};
+                background-color: {colors['page_bg']};
             }}
             QListWidget::item:selected {{
                 background-color: {colors['accent']};
