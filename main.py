@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTabWidget, QTabBar, QGroupBox, QTableWidget,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QProcess, QTimer, QSocketNotifier
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier
 from PyQt5.QtGui import QFont, QDrag, QPixmap, QPainter, QColor
 from PyQt5.uic import loadUi
 
@@ -409,7 +409,9 @@ class AppCard(QFrame):
 
         bg = app_color(self.app_name)
         badge_diameter = max(48, int(self.badge_size * 0.5))
-        badge_font_size = max(18, int(self.badge_size * 0.16))
+        icon_len = max(1, len(str(self.icon)))
+        base_badge_font_size = max(18, int(self.badge_size * 0.16))
+        badge_font_size = max(10, int(base_badge_font_size / max(1.0, (icon_len - 1) * 0.72)))
         name_font_size = max(9, int(self.badge_size * 0.08))
         margin = max(10, int(self.badge_size * 0.08))
         spacing = max(4, int(self.badge_size * 0.03))
@@ -760,7 +762,6 @@ class EmbeddedTerminalWidget(QWidget):
         self.master_fd = None
         self.process = None
         self.notifier = None
-        self.fallback_process = None
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
@@ -794,7 +795,7 @@ class EmbeddedTerminalWidget(QWidget):
 
     def _start_terminal(self):
         if os.name == "nt":
-            self._start_qprocess_fallback()
+            self._append_output("[AppDrawer] Embedded terminal is only supported on Linux/Unix PTY environments.\n")
             return
         try:
             import fcntl
@@ -823,19 +824,7 @@ class EmbeddedTerminalWidget(QWidget):
             if self.command:
                 QTimer.singleShot(150, lambda: self._write_bytes((self.command + "\r").encode()))
         except Exception as exc:
-            self._append_output(f"[AppDrawer] PTY terminal fallback: {exc}\n")
-            self._start_qprocess_fallback()
-
-    def _start_qprocess_fallback(self):
-        shell = self._shell_path()
-        self.fallback_process = QProcess(self)
-        self.fallback_process.setWorkingDirectory(self.work_dir)
-        self.fallback_process.setProcessChannelMode(QProcess.MergedChannels)
-        self.fallback_process.readyReadStandardOutput.connect(self._read_qprocess_output)
-        self.fallback_process.start(shell, ["-i"])
-        self._append_output(f"[AppDrawer] Starting shell: {shell}\n")
-        if self.command:
-            QTimer.singleShot(150, lambda: self._write_bytes((self.command + "\n").encode()))
+            self._append_output(f"[AppDrawer] Failed to start PTY terminal: {exc}\n")
 
     def _read_pty(self):
         if self.master_fd is None:
@@ -852,20 +841,12 @@ class EmbeddedTerminalWidget(QWidget):
                 break
             self._append_output(data.decode(errors="replace"))
 
-    def _read_qprocess_output(self):
-        data = bytes(self.fallback_process.readAllStandardOutput()).decode(errors="replace")
-        if data:
-            self._append_output(data)
-
     def _write_bytes(self, data):
         if self.master_fd is not None:
             try:
                 os.write(self.master_fd, data)
             except OSError:
                 pass
-            return
-        if self.fallback_process and self.fallback_process.state() == QProcess.Running:
-            self.fallback_process.write(data)
 
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
@@ -888,12 +869,6 @@ class EmbeddedTerminalWidget(QWidget):
             self.notifier.setEnabled(False)
             self.notifier.deleteLater()
             self.notifier = None
-        if self.fallback_process and self.fallback_process.state() != QProcess.NotRunning:
-            self.fallback_process.write(b"exit\n")
-            if not self.fallback_process.waitForFinished(500):
-                self.fallback_process.terminate()
-            if not self.fallback_process.waitForFinished(500):
-                self.fallback_process.kill()
         if self.process and self.process.poll() is None:
             try:
                 self._write_bytes(b"exit\r")
