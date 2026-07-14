@@ -5,6 +5,8 @@ import json
 import subprocess
 import hashlib
 import re
+import shutil
+import shlex
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
@@ -826,7 +828,7 @@ class TerminalTextEdit(QPlainTextEdit):
             self.inputBytes.emit(text.encode())
 
 
-class EmbeddedTerminalWidget(QWidget):
+class PtyTerminalWidget(QWidget):
     ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
     def __init__(self, command, work_dir, theme_name="light", parent=None):
@@ -927,7 +929,7 @@ class EmbeddedTerminalWidget(QWidget):
         self.theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.theme_name]
         self.setStyleSheet(f"""
-            EmbeddedTerminalWidget {{
+            PtyTerminalWidget {{
                 background-color: {colors['panel_bg']};
             }}
             TerminalTextEdit {{
@@ -960,6 +962,135 @@ class EmbeddedTerminalWidget(QWidget):
             except OSError:
                 pass
             self.master_fd = None
+
+
+class XTermEmbeddedWidget(QWidget):
+    def __init__(self, command, work_dir, theme_name="light", parent=None):
+        super().__init__(parent)
+        self.command = command
+        self.work_dir = work_dir
+        self.theme_name = theme_name if theme_name in THEMES else "light"
+        self.process = None
+        self._setup_ui()
+        self.apply_theme(self.theme_name)
+        self.destroyed.connect(lambda: self.stop())
+        QTimer.singleShot(100, self._start_xterm)
+
+    @staticmethod
+    def is_available():
+        return os.name != "nt" and bool(os.environ.get("DISPLAY")) and shutil.which("xterm")
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.host = QWidget()
+        self.host.setObjectName("xterm_host")
+        self.host.setAttribute(Qt.WA_NativeWindow, True)
+        self.host.setFocusPolicy(Qt.StrongFocus)
+        self.host.setMinimumHeight(360)
+        layout.addWidget(self.host, 1)
+        self.setFocusProxy(self.host)
+
+    def _shell_path(self):
+        shell = os.environ.get("SHELL")
+        if shell and os.path.exists(shell):
+            return shell
+        return "/bin/bash"
+
+    def _terminal_shell_command(self, shell):
+        shell_name = os.path.basename(shell)
+        quoted_shell = shlex.quote(shell)
+        if shell_name == "fish":
+            return (
+                f"{self.command}\n"
+                "set appdrawer_status $status\n"
+                "echo\n"
+                "echo \"[AppDrawer] Command exited with status $appdrawer_status.\"\n"
+                f"exec {quoted_shell} -i"
+            )
+        if shell_name in {"csh", "tcsh"}:
+            return (
+                f"{self.command}\n"
+                "set appdrawer_status = $status\n"
+                "echo\n"
+                "echo \"[AppDrawer] Command exited with status $appdrawer_status.\"\n"
+                f"exec {quoted_shell} -i"
+            )
+        return (
+            f"{self.command}\n"
+            "status=$?\n"
+            "echo\n"
+            "echo \"[AppDrawer] Command exited with status ${status}.\"\n"
+            f"exec {quoted_shell} -i"
+        )
+
+    def _start_xterm(self):
+        shell = self._shell_path()
+        colors = THEMES[self.theme_name]
+        command = self._terminal_shell_command(shell)
+        env = os.environ.copy()
+        env.setdefault("TERM", "xterm-256color")
+        args = [
+            "-into", str(int(self.host.winId())),
+            "-fa", "Monospace",
+            "-fs", "10",
+            "-sb",
+            "-rightbar",
+            "-bg", colors["input_bg"],
+            "-fg", colors["text"],
+            "-xrm", "XTerm*selectToClipboard: true",
+            "-e", shell, "-ic", command,
+        ]
+        try:
+            self.process = subprocess.Popen(["xterm"] + args, cwd=self.work_dir, env=env)
+            self.host.setFocus()
+        except Exception as exc:
+            print(f"[xterm embed error] {exc}")
+
+    def apply_theme(self, theme_name):
+        self.theme_name = theme_name if theme_name in THEMES else "light"
+        colors = THEMES[self.theme_name]
+        self.setStyleSheet(f"""
+            XTermEmbeddedWidget {{
+                background-color: {colors['panel_bg']};
+            }}
+            QWidget#xterm_host {{
+                background-color: {colors['input_bg']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+            }}
+        """)
+
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=0.5)
+            except Exception:
+                self.process.kill()
+
+
+class EmbeddedTerminalWidget(QWidget):
+    def __init__(self, command, work_dir, theme_name="light", parent=None):
+        super().__init__(parent)
+        self.theme_name = theme_name if theme_name in THEMES else "light"
+        self.terminal = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        terminal_class = XTermEmbeddedWidget if XTermEmbeddedWidget.is_available() else PtyTerminalWidget
+        self.terminal = terminal_class(command, work_dir, self.theme_name)
+        layout.addWidget(self.terminal, 1)
+
+    def apply_theme(self, theme_name):
+        self.theme_name = theme_name if theme_name in THEMES else "light"
+        if self.terminal and hasattr(self.terminal, "apply_theme"):
+            self.terminal.apply_theme(self.theme_name)
+
+    def stop(self):
+        if self.terminal and hasattr(self.terminal, "stop"):
+            self.terminal.stop()
 
 
 class MainWindow(QMainWindow):
