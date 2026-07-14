@@ -8,22 +8,30 @@ import os
 import subprocess
 import shutil
 
+os.environ.setdefault("NO_AT_BRIDGE", "1")
+
+
+def launch_env():
+    env = os.environ.copy()
+    env.setdefault("NO_AT_BRIDGE", "1")
+    return env
+
 
 def run_shell_command(command, work_dir):
     if os.name == "nt":
-        subprocess.Popen(command, cwd=work_dir, shell=True)
+        subprocess.Popen(command, cwd=work_dir, shell=True, env=launch_env())
     else:
-        subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir)
+        subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir, env=launch_env())
 
 
 def run_terminal_command(command, work_dir):
     if os.name == "nt":
-        subprocess.Popen(f'start cmd /k "{command}"', cwd=work_dir, shell=True)
+        subprocess.Popen(f'start cmd /k "{command}"', cwd=work_dir, shell=True, env=launch_env())
         return
 
     terminal = os.environ.get("TERMINAL")
     if terminal and shutil.which(terminal):
-        subprocess.Popen([terminal, "-e", "bash", "-lc", command], cwd=work_dir)
+        subprocess.Popen([terminal, "-e", "bash", "-lc", command], cwd=work_dir, env=launch_env())
         return
 
     launchers = [
@@ -37,7 +45,7 @@ def run_terminal_command(command, work_dir):
     ]
     for executable, args in launchers:
         if shutil.which(executable):
-            subprocess.Popen(args, cwd=work_dir)
+            subprocess.Popen(args, cwd=work_dir, env=launch_env())
             return
 
     print("No supported terminal emulator found; running command without a new terminal.")
@@ -79,7 +87,7 @@ def main():
             else os.path.abspath(os.path.join(app_root, script_path))
         )
         if os.path.isfile(script_abspath):
-            subprocess.Popen([sys.executable, script_abspath], cwd=work_dir)
+            subprocess.Popen([sys.executable, script_abspath], cwd=work_dir, env=launch_env())
         else:
             run_shell_command(script_path, work_dir)
         sys.exit(0)

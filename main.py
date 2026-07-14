@@ -5,6 +5,9 @@ import json
 import subprocess
 import hashlib
 from datetime import datetime
+
+os.environ.setdefault("NO_AT_BRIDGE", "1")
+
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFrame,
                              QScrollArea, QGridLayout, QDialog, QStackedWidget,

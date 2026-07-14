@@ -102,4 +102,5 @@ APP_REGISTRY = {
     "색상 믹서": (ColorMixerApp, "MX"),
     "Script Note": script_app("Apps/ScriptNote/run.py", "SN"),
     "Script Path": script_app("Apps/ScriptPathViewer/run.py", "SP"),
+    "Terminal Sample": terminal_app("pwd; ls -la; echo; read -p 'Press Enter to close...'", "TS"),
 }
