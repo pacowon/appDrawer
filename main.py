@@ -403,7 +403,7 @@ class AppCard(QFrame):
 
     def _fit_title_text(self, text, max_width, max_lines=2):
         base_size = max(10, int(self.badge_size * 0.09))
-        min_size = max(7, int(self.badge_size * 0.052))
+        min_size = max(6, int(self.badge_size * 0.045))
         for font_size in range(base_size, min_size - 1, -1):
             font = QFont("Arial", font_size)
             wrapped, truncated = self._wrap_text_for_width(text, font, max_width, max_lines)
@@ -471,7 +471,7 @@ class AppCard(QFrame):
         name_lbl.setFont(title_font)
         name_lbl.setFixedHeight(title_height)
         name_lbl.setToolTip(self.app_name)
-        name_lbl.setWordWrap(True)
+        name_lbl.setWordWrap(False)
 
         layout.addWidget(badge, 0, Qt.AlignHCenter)
         layout.addWidget(name_lbl, 0, Qt.AlignTop)
@@ -498,7 +498,7 @@ class AppCard(QFrame):
                 f"border-radius:10px;border:2px dashed {colors['accent']};}}"
             )
         else:
-            border_width = 3 if self.app_type == "terminal" else 2
+            border_width = 2
             self.setStyleSheet(
                 f"QFrame#app_card{{background-color:{card_bg};"
                 f"border-radius:10px;border:{border_width}px solid {base_border};"
