@@ -4,8 +4,7 @@ import os
 import json
 import subprocess
 import hashlib
-import shutil
-import shlex
+import re
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
@@ -16,7 +15,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTabWidget, QTabBar, QGroupBox, QTableWidget,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QProcess, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QProcess, QTimer, QSocketNotifier
 from PyQt5.QtGui import QFont, QDrag, QPixmap, QPainter, QColor
 from PyQt5.uic import loadUi
 
@@ -710,60 +709,70 @@ class SidebarButton(QPushButton):
 
 
 # ── 메인 윈도우 ─────────────────────────────────────────────
+class TerminalTextEdit(QPlainTextEdit):
+    inputBytes = pyqtSignal(bytes)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        self.setUndoRedoEnabled(False)
+        self.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.setFont(QFont("Consolas", 10))
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        modifiers = event.modifiers()
+        special_keys = {
+            Qt.Key_Backspace: b"\x7f",
+            Qt.Key_Return: b"\r",
+            Qt.Key_Enter: b"\r",
+            Qt.Key_Tab: b"\t",
+            Qt.Key_Left: b"\x1b[D",
+            Qt.Key_Right: b"\x1b[C",
+            Qt.Key_Up: b"\x1b[A",
+            Qt.Key_Down: b"\x1b[B",
+            Qt.Key_Home: b"\x1b[H",
+            Qt.Key_End: b"\x1b[F",
+            Qt.Key_Delete: b"\x1b[3~",
+            Qt.Key_PageUp: b"\x1b[5~",
+            Qt.Key_PageDown: b"\x1b[6~",
+        }
+        if key in special_keys:
+            self.inputBytes.emit(special_keys[key])
+            return
+        if modifiers & Qt.ControlModifier and Qt.Key_A <= key <= Qt.Key_Z:
+            self.inputBytes.emit(bytes([key - Qt.Key_A + 1]))
+            return
+        text = event.text()
+        if text:
+            self.inputBytes.emit(text.encode())
+
+
 class EmbeddedTerminalWidget(QWidget):
+    ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
     def __init__(self, command, work_dir, theme_name="light", parent=None):
         super().__init__(parent)
         self.command = command
         self.work_dir = work_dir
         self.theme_name = theme_name if theme_name in THEMES else "light"
-        self.use_embedded_xterm = (
-            os.name != "nt"
-            and bool(os.environ.get("DISPLAY"))
-            and shutil.which("xterm") is not None
-        )
-        self.output = None
-        self.input = None
-        self.terminal_host = None
-        self.process = QProcess(self)
-        self.process.setWorkingDirectory(work_dir)
-        self.process.setProcessChannelMode(QProcess.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self._read_output)
-        self.process.errorOccurred.connect(self._handle_error)
-        self.process.finished.connect(self._handle_finished)
-        self.destroyed.connect(lambda: self.stop())
+        self.master_fd = None
+        self.process = None
+        self.notifier = None
+        self.fallback_process = None
         self._setup_ui()
         self.apply_theme(self.theme_name)
-        self._start_shell()
+        self.destroyed.connect(lambda: self.stop())
+        self._start_terminal()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-
-        if self.use_embedded_xterm:
-            self.terminal_host = QWidget()
-            self.terminal_host.setObjectName("embedded_xterm_host")
-            self.terminal_host.setAttribute(Qt.WA_NativeWindow, True)
-            self.terminal_host.setMinimumHeight(320)
-            layout.addWidget(self.terminal_host, 1)
-            return
-
-        self.output = QPlainTextEdit()
-        self.output.setReadOnly(True)
-        self.output.setFont(QFont("Consolas", 10))
-        self.output.setLineWrapMode(QPlainTextEdit.NoWrap)
-
-        input_row = QHBoxLayout()
-        input_row.setSpacing(8)
-        self.prompt_label = QLabel("$")
-        self.input = QLineEdit()
-        self.input.setPlaceholderText("Type a command and press Enter")
-        self.input.returnPressed.connect(self._send_input)
-        input_row.addWidget(self.prompt_label)
-        input_row.addWidget(self.input, 1)
-
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.output = TerminalTextEdit()
+        self.output.inputBytes.connect(self._write_bytes)
         layout.addWidget(self.output, 1)
-        layout.addLayout(input_row)
 
     def _shell_path(self):
         shell = os.environ.get("SHELL")
@@ -771,92 +780,92 @@ class EmbeddedTerminalWidget(QWidget):
             return shell
         return "/bin/bash"
 
-    def _terminal_shell_command(self, shell):
-        shell_name = os.path.basename(shell)
-        quoted_shell = shlex.quote(shell)
-        if shell_name == "fish":
-            return (
-                f"{self.command}\n"
-                "set appdrawer_status $status\n"
-                "echo\n"
-                "echo \"[AppDrawer] Command exited with status $appdrawer_status.\"\n"
-                f"exec {quoted_shell} -i"
-            )
-        if shell_name in {"csh", "tcsh"}:
-            return (
-                f"{self.command}\n"
-                "set appdrawer_status = $status\n"
-                "echo\n"
-                "echo \"[AppDrawer] Command exited with status $appdrawer_status.\"\n"
-                f"exec {quoted_shell} -i"
-            )
-        return (
-            f"{self.command}\n"
-            "status=$?\n"
-            "echo\n"
-            "echo \"[AppDrawer] Command exited with status ${status}.\"\n"
-            f"exec {quoted_shell} -i"
-        )
-
-    def _start_shell(self):
-        shell = self._shell_path()
-        if self.use_embedded_xterm:
-            QTimer.singleShot(0, lambda: self._start_embedded_xterm(shell))
-            return
-
-        self._append_output(f"[AppDrawer] Starting shell: {shell}\n")
-        self._append_output(f"[AppDrawer] Working directory: {self.work_dir}\n")
-        self.process.start(shell, ["-i"])
-        if self.command:
-            QTimer.singleShot(250, lambda: self._write_command(self.command, show=True))
-
-    def _start_embedded_xterm(self, shell):
-        colors = THEMES[self.theme_name]
-        win_id = int(self.terminal_host.winId())
-        terminal_command = self._terminal_shell_command(shell)
-        args = [
-            "-into", str(win_id),
-            "-fa", "Monospace",
-            "-fs", "10",
-            "-bg", colors["input_bg"],
-            "-fg", colors["text"],
-            "-e", shell, "-ic", terminal_command,
-        ]
-        self.process.start("xterm", args)
-
     def _append_output(self, text):
-        if self.output is None:
-            print(text, end="")
-            return
-        self.output.moveCursor(self.output.textCursor().End)
-        self.output.insertPlainText(text)
-        self.output.moveCursor(self.output.textCursor().End)
+        text = self.ANSI_RE.sub("", text).replace("\r\n", "\n").replace("\r", "")
+        cursor = self.output.textCursor()
+        cursor.movePosition(cursor.End)
+        for char in text:
+            if char == "\b":
+                cursor.deletePreviousChar()
+            else:
+                cursor.insertText(char)
+        self.output.setTextCursor(cursor)
+        self.output.ensureCursorVisible()
 
-    def _read_output(self):
-        data = bytes(self.process.readAllStandardOutput()).decode(errors="replace")
+    def _start_terminal(self):
+        if os.name == "nt":
+            self._start_qprocess_fallback()
+            return
+        try:
+            import fcntl
+            import pty
+
+            shell = self._shell_path()
+            self.master_fd, slave_fd = pty.openpty()
+            flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
+            fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+            env = os.environ.copy()
+            env.setdefault("TERM", "xterm-256color")
+            self.process = subprocess.Popen(
+                [shell, "-i"],
+                cwd=self.work_dir,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                preexec_fn=os.setsid,
+                env=env,
+                close_fds=True,
+            )
+            os.close(slave_fd)
+            self.notifier = QSocketNotifier(self.master_fd, QSocketNotifier.Read, self)
+            self.notifier.activated.connect(self._read_pty)
+            self.output.setFocus()
+            if self.command:
+                QTimer.singleShot(150, lambda: self._write_bytes((self.command + "\r").encode()))
+        except Exception as exc:
+            self._append_output(f"[AppDrawer] PTY terminal fallback: {exc}\n")
+            self._start_qprocess_fallback()
+
+    def _start_qprocess_fallback(self):
+        shell = self._shell_path()
+        self.fallback_process = QProcess(self)
+        self.fallback_process.setWorkingDirectory(self.work_dir)
+        self.fallback_process.setProcessChannelMode(QProcess.MergedChannels)
+        self.fallback_process.readyReadStandardOutput.connect(self._read_qprocess_output)
+        self.fallback_process.start(shell, ["-i"])
+        self._append_output(f"[AppDrawer] Starting shell: {shell}\n")
+        if self.command:
+            QTimer.singleShot(150, lambda: self._write_bytes((self.command + "\n").encode()))
+
+    def _read_pty(self):
+        if self.master_fd is None:
+            return
+        while True:
+            try:
+                data = os.read(self.master_fd, 4096)
+            except BlockingIOError:
+                break
+            except OSError:
+                self.stop()
+                break
+            if not data:
+                break
+            self._append_output(data.decode(errors="replace"))
+
+    def _read_qprocess_output(self):
+        data = bytes(self.fallback_process.readAllStandardOutput()).decode(errors="replace")
         if data:
             self._append_output(data)
 
-    def _write_command(self, command, show=False):
-        if self.process.state() != QProcess.Running:
-            self._append_output("[AppDrawer] Shell is not running.\n")
+    def _write_bytes(self, data):
+        if self.master_fd is not None:
+            try:
+                os.write(self.master_fd, data)
+            except OSError:
+                pass
             return
-        if show:
-            self._append_output(f"$ {command}\n")
-        self.process.write((command + "\n").encode())
-
-    def _send_input(self):
-        if self.input is None:
-            return
-        command = self.input.text()
-        self.input.clear()
-        self._write_command(command, show=True)
-
-    def _handle_error(self, error):
-        self._append_output(f"\n[AppDrawer] Terminal process error: {error}\n")
-
-    def _handle_finished(self, exit_code, exit_status):
-        self._append_output(f"\n[AppDrawer] Shell closed. exit_code={exit_code}, status={exit_status}\n")
+        if self.fallback_process and self.fallback_process.state() == QProcess.Running:
+            self.fallback_process.write(data)
 
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
@@ -864,44 +873,43 @@ class EmbeddedTerminalWidget(QWidget):
         self.setStyleSheet(f"""
             EmbeddedTerminalWidget {{
                 background-color: {colors['panel_bg']};
-                color: {colors['text']};
             }}
-            QPlainTextEdit {{
+            TerminalTextEdit {{
                 background-color: {colors['input_bg']};
                 color: {colors['text']};
                 border: 1px solid {colors['border']};
                 border-radius: 8px;
-                padding: 8px;
-            }}
-            QLabel {{
-                color: {colors['text']};
-                font-weight: bold;
-            }}
-            QLineEdit {{
-                background-color: {colors['input_bg']};
-                color: {colors['text']};
-                border: 1px solid {colors['border']};
-                border-radius: 8px;
-                padding: 8px 10px;
-            }}
-            QWidget#embedded_xterm_host {{
-                background-color: {colors['input_bg']};
-                border: 1px solid {colors['border']};
-                border-radius: 8px;
+                padding: 10px;
             }}
         """)
 
     def stop(self):
-        if self.process.state() == QProcess.NotRunning:
-            return
-        if self.use_embedded_xterm:
-            self.process.terminate()
-        else:
-            self.process.write(b"exit\n")
-        if not self.process.waitForFinished(500):
-            self.process.terminate()
-        if not self.process.waitForFinished(500):
-            self.process.kill()
+        if self.notifier:
+            self.notifier.setEnabled(False)
+            self.notifier.deleteLater()
+            self.notifier = None
+        if self.fallback_process and self.fallback_process.state() != QProcess.NotRunning:
+            self.fallback_process.write(b"exit\n")
+            if not self.fallback_process.waitForFinished(500):
+                self.fallback_process.terminate()
+            if not self.fallback_process.waitForFinished(500):
+                self.fallback_process.kill()
+        if self.process and self.process.poll() is None:
+            try:
+                self._write_bytes(b"exit\r")
+                self.process.wait(timeout=0.5)
+            except Exception:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=0.5)
+                except Exception:
+                    self.process.kill()
+        if self.master_fd is not None:
+            try:
+                os.close(self.master_fd)
+            except OSError:
+                pass
+            self.master_fd = None
 
 
 class MainWindow(QMainWindow):
