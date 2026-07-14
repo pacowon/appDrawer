@@ -414,16 +414,21 @@ class AppCard(QFrame):
 
     def _wrap_text_for_width(self, text, font, max_width, max_lines):
         metrics = QFontMetrics(font)
+        def text_width(value):
+            if hasattr(metrics, "horizontalAdvance"):
+                return metrics.horizontalAdvance(value)
+            return metrics.width(value)
+
         lines = []
         current = ""
         for char in str(text):
             candidate = current + char
-            if current and metrics.horizontalAdvance(candidate) > max_width:
+            if current and text_width(candidate) > max_width:
                 lines.append(current)
                 current = char
                 if len(lines) == max_lines:
                     last = lines[-1]
-                    while last and metrics.horizontalAdvance(last + "...") > max_width:
+                    while last and text_width(last + "...") > max_width:
                         last = last[:-1]
                     lines[-1] = (last + "...") if last else "..."
                     return "\n".join(lines), True
