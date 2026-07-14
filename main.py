@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QScrollArea, QGridLayout, QDialog, QStackedWidget,
                              QTabWidget, QTabBar, QGroupBox, QTableWidget,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
-                             QLineEdit, QSpinBox)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
+                             QLineEdit, QSpinBox, QPlainTextEdit)
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QProcess, QTimer
 from PyQt5.QtGui import QFont, QDrag, QPixmap, QPainter, QColor
 from PyQt5.uic import loadUi
 
@@ -708,6 +708,126 @@ class SidebarButton(QPushButton):
 
 
 # ── 메인 윈도우 ─────────────────────────────────────────────
+class EmbeddedTerminalWidget(QWidget):
+    def __init__(self, command, work_dir, theme_name="light", parent=None):
+        super().__init__(parent)
+        self.command = command
+        self.work_dir = work_dir
+        self.theme_name = theme_name if theme_name in THEMES else "light"
+        self.process = QProcess(self)
+        self.process.setWorkingDirectory(work_dir)
+        self.process.setProcessChannelMode(QProcess.MergedChannels)
+        self.process.readyReadStandardOutput.connect(self._read_output)
+        self.process.errorOccurred.connect(self._handle_error)
+        self.process.finished.connect(self._handle_finished)
+        self.destroyed.connect(lambda: self.stop())
+        self._setup_ui()
+        self.apply_theme(self.theme_name)
+        self._start_shell()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        self.output = QPlainTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setFont(QFont("Consolas", 10))
+        self.output.setLineWrapMode(QPlainTextEdit.NoWrap)
+
+        input_row = QHBoxLayout()
+        input_row.setSpacing(8)
+        self.prompt_label = QLabel("$")
+        self.input = QLineEdit()
+        self.input.setPlaceholderText("Type a command and press Enter")
+        self.input.returnPressed.connect(self._send_input)
+        input_row.addWidget(self.prompt_label)
+        input_row.addWidget(self.input, 1)
+
+        layout.addWidget(self.output, 1)
+        layout.addLayout(input_row)
+
+    def _shell_path(self):
+        shell = os.environ.get("SHELL")
+        if shell and os.path.exists(shell):
+            return shell
+        return "/bin/bash"
+
+    def _start_shell(self):
+        shell = self._shell_path()
+        self._append_output(f"[AppDrawer] Starting shell: {shell}\n")
+        self._append_output(f"[AppDrawer] Working directory: {self.work_dir}\n")
+        self.process.start(shell, ["-i"])
+        if self.command:
+            QTimer.singleShot(250, lambda: self._write_command(self.command, show=True))
+
+    def _append_output(self, text):
+        self.output.moveCursor(self.output.textCursor().End)
+        self.output.insertPlainText(text)
+        self.output.moveCursor(self.output.textCursor().End)
+
+    def _read_output(self):
+        data = bytes(self.process.readAllStandardOutput()).decode(errors="replace")
+        if data:
+            self._append_output(data)
+
+    def _write_command(self, command, show=False):
+        if self.process.state() != QProcess.Running:
+            self._append_output("[AppDrawer] Shell is not running.\n")
+            return
+        if show:
+            self._append_output(f"$ {command}\n")
+        self.process.write((command + "\n").encode())
+
+    def _send_input(self):
+        command = self.input.text()
+        self.input.clear()
+        self._write_command(command, show=True)
+
+    def _handle_error(self, error):
+        self._append_output(f"\n[AppDrawer] Terminal process error: {error}\n")
+
+    def _handle_finished(self, exit_code, exit_status):
+        self._append_output(f"\n[AppDrawer] Shell closed. exit_code={exit_code}, status={exit_status}\n")
+
+    def apply_theme(self, theme_name):
+        self.theme_name = theme_name if theme_name in THEMES else "light"
+        colors = THEMES[self.theme_name]
+        self.setStyleSheet(f"""
+            EmbeddedTerminalWidget {{
+                background-color: {colors['panel_bg']};
+                color: {colors['text']};
+            }}
+            QPlainTextEdit {{
+                background-color: {colors['input_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 8px;
+            }}
+            QLabel {{
+                color: {colors['text']};
+                font-weight: bold;
+            }}
+            QLineEdit {{
+                background-color: {colors['input_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 8px 10px;
+            }}
+        """)
+
+    def stop(self):
+        if self.process.state() == QProcess.NotRunning:
+            return
+        self.process.write(b"exit\n")
+        if not self.process.waitForFinished(500):
+            self.process.terminate()
+        if not self.process.waitForFinished(500):
+            self.process.kill()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1313,6 +1433,9 @@ class MainWindow(QMainWindow):
         for grid in self.findChildren(AppGrid):
             grid.set_theme(self.current_theme_name)
 
+        for terminal in self.findChildren(EmbeddedTerminalWidget):
+            terminal.apply_theme(self.current_theme_name)
+
         for path_bar in self._tab_path_bars.values():
             if isinstance(path_bar, PathBar):
                 path_bar.apply_theme(colors, disabled=not path_bar.isEnabled())
@@ -1476,6 +1599,12 @@ class MainWindow(QMainWindow):
     def _log_app_click(self, app_name):
         print(f"{app_name} Clicked. Run App")
 
+    def _cleanup_embedded_terminals(self, widget):
+        if not widget:
+            return
+        for terminal in widget.findChildren(EmbeddedTerminalWidget):
+            terminal.stop()
+
     def launch_app_in_tab(self, app_name, tab_stack, original_tab_name):
         # tab_container 기준으로 탭 인덱스 찾기
         tab_container = self._stack_to_container.get(id(tab_stack))
@@ -1484,7 +1613,7 @@ class MainWindow(QMainWindow):
             self.apps_tab_widget.setTabText(tab_index, app_name)
         self._log_app_click(app_name)
         app_config = get_app_config(self.apps[app_name])
-        if app_config["type"] in {"script", "command", "terminal"}:
+        if app_config["type"] in {"script", "command"}:
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack), log_click=False)
@@ -1500,6 +1629,8 @@ class MainWindow(QMainWindow):
             path_bar.apply_theme(THEMES[self.current_theme_name], disabled=True)
 
         def go_back():
+            current_page = tab_stack.currentWidget()
+            self._cleanup_embedded_terminals(current_page)
             tab_stack.setCurrentIndex(0)
             idx = self.apps_tab_widget.indexOf(tab_container) if tab_container else -1
             if idx >= 0:
@@ -1531,7 +1662,13 @@ class MainWindow(QMainWindow):
         previous_cwd = os.getcwd()
         try:
             os.chdir(target_path)
-            app_widget = app_config["app_class"]()
+            if app_config["type"] == "terminal":
+                command = app_config.get("command")
+                if not command:
+                    raise ValueError(f"Terminal command is missing for app: {app_name}")
+                app_widget = EmbeddedTerminalWidget(command, target_path, self.current_theme_name)
+            else:
+                app_widget = app_config["app_class"]()
             if hasattr(app_widget, "set_path_provider"):
                 app_widget.set_path_provider(lambda s=tab_stack: self._get_tab_path(s))
 
@@ -1539,6 +1676,7 @@ class MainWindow(QMainWindow):
             app_layout.addWidget(app_widget, 1)
             while tab_stack.count() > 1:
                 w = tab_stack.widget(1)
+                self._cleanup_embedded_terminals(w)
                 tab_stack.removeWidget(w)
                 w.deleteLater()
             tab_stack.addWidget(app_page)
@@ -1571,6 +1709,7 @@ class MainWindow(QMainWindow):
             if tab_container:
                 self._tab_path_bars.pop(id(tab_container), None)
             if tab_stack:
+                self._cleanup_embedded_terminals(tab_stack)
                 self._tab_path_bars.pop(id(tab_stack), None)
                 self._stack_to_container.pop(id(tab_stack), None)
             if tab_container:
