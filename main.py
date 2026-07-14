@@ -396,7 +396,7 @@ class AppCard(QFrame):
         self.app_class = app_class
         self.icon = icon
         self.badge_size = badge_size
-        self.app_type = app_type
+        self.app_type = str(app_type or "widget").strip().lower()
         self._drag_start_pos = None
         self.theme_name = "light"
         self._setup_ui()
@@ -437,6 +437,7 @@ class AppCard(QFrame):
         return "\n".join(lines[:max_lines]), len(lines) > max_lines
 
     def _setup_ui(self):
+        self.setObjectName("app_card")
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
         self.setFixedSize(self.badge_size, self.badge_size)
         self.setCursor(Qt.PointingHandCursor)
@@ -493,16 +494,17 @@ class AppCard(QFrame):
         )
         if dragging:
             self.setStyleSheet(
-                f"AppCard{{background-color:{colors['panel_alt_bg']};"
+                f"QFrame#app_card{{background-color:{colors['panel_alt_bg']};"
                 f"border-radius:10px;border:2px dashed {colors['accent']};}}"
             )
         else:
+            border_width = 3 if self.app_type == "terminal" else 2
             self.setStyleSheet(
-                f"AppCard{{background-color:{card_bg};"
-                f"border-radius:10px;border:2px solid {base_border};"
+                f"QFrame#app_card{{background-color:{card_bg};"
+                f"border-radius:10px;border:{border_width}px solid {base_border};"
                 f"color:{colors['text']};}}"
-                f"AppCard:hover{{background-color:{card_hover_bg};"
-                f"border:2px solid {hover_border};}}"
+                f"QFrame#app_card:hover{{background-color:{card_hover_bg};"
+                f"border:{border_width}px solid {hover_border};}}"
             )
 
     def set_theme(self, theme_name):
