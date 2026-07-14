@@ -402,8 +402,8 @@ class AppCard(QFrame):
         self._setup_ui()
 
     def _fit_title_text(self, text, max_width, max_lines=3):
-        base_size = max(8, int(self.badge_size * 0.075))
-        min_size = max(7, int(self.badge_size * 0.055))
+        base_size = max(10, int(self.badge_size * 0.09))
+        min_size = max(8, int(self.badge_size * 0.065))
         for font_size in range(base_size, min_size - 1, -1):
             font = QFont("Arial", font_size)
             wrapped, truncated = self._wrap_text_for_width(text, font, max_width, max_lines)
@@ -442,7 +442,7 @@ class AppCard(QFrame):
         self.setCursor(Qt.PointingHandCursor)
         self.setAcceptDrops(False)
 
-        bg = app_color(self.app_name)
+        bg = "#f39c12" if self.app_type == "terminal" else app_color(self.app_name)
         margin = max(8, int(self.badge_size * 0.07))
         spacing = max(3, int(self.badge_size * 0.025))
         badge_diameter = max(42, int(self.badge_size * 0.44))
@@ -481,8 +481,10 @@ class AppCard(QFrame):
     def _apply_style(self, dragging):
         colors = THEMES[self.theme_name]
         external_types = {"script", "command", "terminal"}
-        card_bg = colors["panel_alt_bg"] if self.app_type == "terminal" else colors["card_bg"]
-        card_hover_bg = colors["card_hover_bg"] if self.app_type != "terminal" else colors["panel_bg"]
+        terminal_bg = "#fff1d6" if self.theme_name != "dark" else "#3a2a12"
+        terminal_hover_bg = "#ffe4ad" if self.theme_name != "dark" else "#4a3516"
+        card_bg = terminal_bg if self.app_type == "terminal" else colors["card_bg"]
+        card_hover_bg = terminal_hover_bg if self.app_type == "terminal" else colors["card_hover_bg"]
         base_border = colors["accent"] if self.app_type in external_types else colors["card_border"]
         hover_border = colors["accent_hover"] if self.app_type in external_types else colors["card_hover_border"]
         if dragging:
