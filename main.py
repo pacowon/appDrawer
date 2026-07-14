@@ -403,7 +403,7 @@ class AppCard(QFrame):
 
     def _fit_title_text(self, text, max_width, max_lines=2):
         base_size = max(10, int(self.badge_size * 0.09))
-        min_size = max(6, int(self.badge_size * 0.045))
+        min_size = max(5, int(self.badge_size * 0.038))
         for font_size in range(base_size, min_size - 1, -1):
             font = QFont("Arial", font_size)
             wrapped, truncated = self._wrap_text_for_width(text, font, max_width, max_lines)
@@ -451,8 +451,13 @@ class AppCard(QFrame):
         base_badge_font_size = max(18, int(self.badge_size * 0.16))
         badge_font_size = max(10, int(base_badge_font_size / max(1.0, (icon_len - 1) * 0.72)))
         title_width = self.badge_size - (margin * 2)
-        title_height = max(34, self.badge_size - (margin * 2) - badge_diameter - spacing)
         title_text, title_font = self._fit_title_text(self.app_name, title_width, max_lines=2)
+        title_metrics = QFontMetrics(title_font)
+        title_height = min(
+            self.badge_size - (margin * 2) - badge_diameter - spacing,
+            (title_metrics.lineSpacing() * 2) + 2,
+        )
+        title_height = max(title_metrics.lineSpacing() + 2, title_height)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(margin, margin, margin, margin)
@@ -498,7 +503,7 @@ class AppCard(QFrame):
                 f"border-radius:10px;border:2px dashed {colors['accent']};}}"
             )
         else:
-            border_width = 2
+            border_width = 1 if self.app_type == "terminal" else 2
             self.setStyleSheet(
                 f"QFrame#app_card{{background-color:{card_bg};"
                 f"border-radius:10px;border:{border_width}px solid {base_border};"
