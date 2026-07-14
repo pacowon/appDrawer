@@ -977,6 +977,7 @@ class XTermEmbeddedWidget(QWidget):
         self.xterm_window_id = None
         self._start_requested = False
         self._start_attempts = 0
+        self._last_start_size = None
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
@@ -1034,7 +1035,12 @@ class XTermEmbeddedWidget(QWidget):
     def _start_xterm(self):
         if self.process is not None:
             return
-        if not self.host.isVisible() or self.host.width() <= 1 or self.host.height() <= 1:
+        current_size = (self.host.width(), self.host.height())
+        if not self.host.isVisible() or current_size[0] <= 120 or current_size[1] <= 120:
+            self._schedule_xterm_start()
+            return
+        if self._last_start_size != current_size and self._start_attempts < 8:
+            self._last_start_size = current_size
             self._schedule_xterm_start()
             return
 
@@ -1043,8 +1049,11 @@ class XTermEmbeddedWidget(QWidget):
         command = self._terminal_shell_command(shell)
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
+        cols = max(40, current_size[0] // 8)
+        rows = max(12, current_size[1] // 17)
         args = [
             "-into", str(int(self.host.winId())),
+            "-geometry", f"{cols}x{rows}",
             "-fa", "Monospace",
             "-fs", "10",
             "-sb",
@@ -1057,7 +1066,7 @@ class XTermEmbeddedWidget(QWidget):
         try:
             self.process = subprocess.Popen(["xterm"] + args, cwd=self.work_dir, env=env)
             self.host.setFocus()
-            for delay in (200, 500, 1000, 1500):
+            for delay in (100, 200, 350, 500, 800, 1200, 1800):
                 QTimer.singleShot(delay, self._sync_xterm_size)
             QTimer.singleShot(900, self._check_startup_failed)
         except Exception as exc:
@@ -1072,7 +1081,7 @@ class XTermEmbeddedWidget(QWidget):
         if self.process is not None:
             return
         self._start_attempts += 1
-        delay = 100 if self._start_attempts < 5 else 250
+        delay = 80 if self._start_attempts < 8 else 180
         QTimer.singleShot(delay, self._start_xterm)
 
     def showEvent(self, event):
@@ -1114,6 +1123,14 @@ class XTermEmbeddedWidget(QWidget):
                 ctypes.c_uint,
                 ctypes.c_uint,
             ]
+            x11.XMoveResizeWindow.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_ulong,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_uint,
+                ctypes.c_uint,
+            ]
             display = x11.XOpenDisplay(None)
             if not display:
                 return None, None
@@ -1152,17 +1169,49 @@ class XTermEmbeddedWidget(QWidget):
 
         return self.xterm_window_id
 
-    def _resize_x11_window(self, window_id, width, height):
+    def _child_windows(self, x11, display, window_id):
+        root = ctypes.c_ulong()
+        parent_return = ctypes.c_ulong()
+        children = ctypes.POINTER(ctypes.c_ulong)()
+        nchildren = ctypes.c_uint()
+        ok = x11.XQueryTree(
+            ctypes.c_void_p(display),
+            ctypes.c_ulong(window_id),
+            ctypes.byref(root),
+            ctypes.byref(parent_return),
+            ctypes.byref(children),
+            ctypes.byref(nchildren),
+        )
+        result = []
+        if ok and nchildren.value:
+            result = [int(children[i]) for i in range(nchildren.value)]
+        if children:
+            x11.XFree(children)
+        return result
+
+    def _resize_x11_tree(self, window_id, width, height):
         x11, display = self._x11_display()
         if not display:
             return
         try:
-            x11.XResizeWindow(
-                ctypes.c_void_p(display),
-                ctypes.c_ulong(window_id),
-                ctypes.c_uint(max(1, width)),
-                ctypes.c_uint(max(1, height)),
-            )
+            target_width = max(1, width)
+            target_height = max(1, height)
+            pending = [window_id]
+            seen = set()
+            while pending:
+                current = pending.pop(0)
+                if current in seen:
+                    continue
+                seen.add(current)
+                x11.XMoveResizeWindow(
+                    ctypes.c_void_p(display),
+                    ctypes.c_ulong(current),
+                    ctypes.c_int(0),
+                    ctypes.c_int(0),
+                    ctypes.c_uint(target_width),
+                    ctypes.c_uint(target_height),
+                )
+                pending.extend(self._child_windows(x11, display, current))
             x11.XFlush(ctypes.c_void_p(display))
         finally:
             x11.XCloseDisplay(ctypes.c_void_p(display))
@@ -1173,7 +1222,7 @@ class XTermEmbeddedWidget(QWidget):
         window_id = self._find_xterm_window()
         if not window_id:
             return
-        self._resize_x11_window(window_id, self.host.width(), self.host.height())
+        self._resize_x11_tree(window_id, self.host.width(), self.host.height())
 
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
