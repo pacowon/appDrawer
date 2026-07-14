@@ -966,6 +966,8 @@ class PtyTerminalWidget(QWidget):
 
 
 class XTermEmbeddedWidget(QWidget):
+    failed = pyqtSignal()
+
     def __init__(self, command, work_dir, theme_name="light", parent=None):
         super().__init__(parent)
         self.command = command
@@ -973,10 +975,11 @@ class XTermEmbeddedWidget(QWidget):
         self.theme_name = theme_name if theme_name in THEMES else "light"
         self.process = None
         self.xterm_window_id = None
+        self._start_requested = False
+        self._start_attempts = 0
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
-        QTimer.singleShot(100, self._start_xterm)
 
     @staticmethod
     def is_available():
@@ -1029,6 +1032,12 @@ class XTermEmbeddedWidget(QWidget):
         )
 
     def _start_xterm(self):
+        if self.process is not None:
+            return
+        if not self.host.isVisible() or self.host.width() <= 1 or self.host.height() <= 1:
+            self._schedule_xterm_start()
+            return
+
         shell = self._shell_path()
         colors = THEMES[self.theme_name]
         command = self._terminal_shell_command(shell)
@@ -1048,10 +1057,30 @@ class XTermEmbeddedWidget(QWidget):
         try:
             self.process = subprocess.Popen(["xterm"] + args, cwd=self.work_dir, env=env)
             self.host.setFocus()
-            for delay in (200, 500, 1000):
+            for delay in (200, 500, 1000, 1500):
                 QTimer.singleShot(delay, self._sync_xterm_size)
+            QTimer.singleShot(900, self._check_startup_failed)
         except Exception as exc:
             print(f"[xterm embed error] {exc}")
+            self.failed.emit()
+
+    def _check_startup_failed(self):
+        if self.process and self.process.poll() is not None and not self.xterm_window_id:
+            self.failed.emit()
+
+    def _schedule_xterm_start(self):
+        if self.process is not None:
+            return
+        self._start_attempts += 1
+        delay = 100 if self._start_attempts < 5 else 250
+        QTimer.singleShot(delay, self._start_xterm)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._start_requested:
+            self._start_requested = True
+            self.host.winId()
+            QTimer.singleShot(0, self._start_xterm)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1179,7 +1208,21 @@ class EmbeddedTerminalWidget(QWidget):
         layout.setSpacing(0)
         terminal_class = XTermEmbeddedWidget if XTermEmbeddedWidget.is_available() else PtyTerminalWidget
         self.terminal = terminal_class(command, work_dir, self.theme_name)
+        if isinstance(self.terminal, XTermEmbeddedWidget):
+            self.terminal.failed.connect(
+                lambda c=command, w=work_dir: self._fallback_to_pty(c, w)
+            )
         layout.addWidget(self.terminal, 1)
+
+    def _fallback_to_pty(self, command, work_dir):
+        if isinstance(self.terminal, PtyTerminalWidget):
+            return
+        old_terminal = self.terminal
+        self.layout().removeWidget(old_terminal)
+        old_terminal.stop()
+        old_terminal.deleteLater()
+        self.terminal = PtyTerminalWidget(command, work_dir, self.theme_name)
+        self.layout().addWidget(self.terminal, 1)
 
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
