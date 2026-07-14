@@ -25,6 +25,21 @@ def run_shell_command(command, work_dir):
         subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir, env=launch_env())
 
 
+def run_script_entry(script_path, script_abspath, work_dir):
+    if os.path.isfile(script_abspath):
+        if script_abspath.lower().endswith(".py"):
+            subprocess.Popen([sys.executable, script_abspath], cwd=work_dir, env=launch_env())
+        elif os.name != "nt" and os.access(script_abspath, os.X_OK):
+            subprocess.Popen([script_abspath], cwd=work_dir, env=launch_env())
+        elif os.name == "nt":
+            subprocess.Popen([script_abspath], cwd=work_dir, shell=True, env=launch_env())
+        else:
+            run_shell_command(shlex.quote(script_abspath), work_dir)
+        return
+
+    run_shell_command(script_path, work_dir)
+
+
 def interactive_shell_path():
     shell = os.environ.get("SHELL")
     if shell and os.path.exists(shell):
@@ -130,10 +145,7 @@ def main():
             if os.path.isabs(script_path)
             else os.path.abspath(os.path.join(app_root, script_path))
         )
-        if os.path.isfile(script_abspath):
-            subprocess.Popen([sys.executable, script_abspath], cwd=work_dir, env=launch_env())
-        else:
-            run_shell_command(script_path, work_dir)
+        run_script_entry(script_path, script_abspath, work_dir)
         sys.exit(0)
     if app_config["type"] == "command":
         command = app_config.get("command")

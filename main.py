@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier
-from PyQt5.QtGui import QFont, QDrag, QPixmap, QPainter, QColor
+from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor
 from PyQt5.uic import loadUi
 
 from Apps.path_bar import PathBar
@@ -401,6 +401,38 @@ class AppCard(QFrame):
         self.theme_name = "light"
         self._setup_ui()
 
+    def _fit_title_text(self, text, max_width, max_lines=3):
+        base_size = max(8, int(self.badge_size * 0.075))
+        min_size = max(7, int(self.badge_size * 0.055))
+        for font_size in range(base_size, min_size - 1, -1):
+            font = QFont("Arial", font_size)
+            wrapped, truncated = self._wrap_text_for_width(text, font, max_width, max_lines)
+            if not truncated:
+                return wrapped, font
+        wrapped, _ = self._wrap_text_for_width(text, QFont("Arial", min_size), max_width, max_lines)
+        return wrapped, QFont("Arial", min_size)
+
+    def _wrap_text_for_width(self, text, font, max_width, max_lines):
+        metrics = QFontMetrics(font)
+        lines = []
+        current = ""
+        for char in str(text):
+            candidate = current + char
+            if current and metrics.horizontalAdvance(candidate) > max_width:
+                lines.append(current)
+                current = char
+                if len(lines) == max_lines:
+                    last = lines[-1]
+                    while last and metrics.horizontalAdvance(last + "...") > max_width:
+                        last = last[:-1]
+                    lines[-1] = (last + "...") if last else "..."
+                    return "\n".join(lines), True
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return "\n".join(lines[:max_lines]), len(lines) > max_lines
+
     def _setup_ui(self):
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
         self.setFixedSize(self.badge_size, self.badge_size)
@@ -408,13 +440,15 @@ class AppCard(QFrame):
         self.setAcceptDrops(False)
 
         bg = app_color(self.app_name)
-        badge_diameter = max(48, int(self.badge_size * 0.5))
+        margin = max(8, int(self.badge_size * 0.07))
+        spacing = max(3, int(self.badge_size * 0.025))
+        badge_diameter = max(42, int(self.badge_size * 0.44))
         icon_len = max(1, len(str(self.icon)))
         base_badge_font_size = max(18, int(self.badge_size * 0.16))
         badge_font_size = max(10, int(base_badge_font_size / max(1.0, (icon_len - 1) * 0.72)))
-        name_font_size = max(9, int(self.badge_size * 0.08))
-        margin = max(10, int(self.badge_size * 0.08))
-        spacing = max(4, int(self.badge_size * 0.03))
+        title_width = self.badge_size - (margin * 2)
+        title_height = max(34, self.badge_size - (margin * 2) - badge_diameter - spacing)
+        title_text, title_font = self._fit_title_text(self.app_name, title_width)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(margin, margin, margin, margin)
@@ -428,19 +462,24 @@ class AppCard(QFrame):
             f"QLabel{{background-color:{bg};color:white;border-radius:{badge_diameter // 2}px;}}"
         )
 
-        name_lbl = QLabel(self.app_name)
+        name_lbl = QLabel(title_text)
         name_lbl.setAlignment(Qt.AlignCenter)
-        name_lbl.setFont(QFont("Arial", name_font_size))
+        name_lbl.setFont(title_font)
+        name_lbl.setFixedHeight(title_height)
+        name_lbl.setToolTip(self.app_name)
         name_lbl.setWordWrap(True)
 
         layout.addWidget(badge, 0, Qt.AlignHCenter)
-        layout.addWidget(name_lbl)
+        layout.addWidget(name_lbl, 0, Qt.AlignTop)
+        layout.addStretch(1)
         self.setLayout(layout)
         self._apply_style(False)
 
     def _apply_style(self, dragging):
         colors = THEMES[self.theme_name]
         external_types = {"script", "command", "terminal"}
+        card_bg = colors["panel_alt_bg"] if self.app_type == "terminal" else colors["card_bg"]
+        card_hover_bg = colors["card_hover_bg"] if self.app_type != "terminal" else colors["panel_bg"]
         base_border = colors["accent"] if self.app_type in external_types else colors["card_border"]
         hover_border = colors["accent_hover"] if self.app_type in external_types else colors["card_hover_border"]
         if dragging:
@@ -450,10 +489,10 @@ class AppCard(QFrame):
             )
         else:
             self.setStyleSheet(
-                f"AppCard{{background-color:{colors['card_bg']};"
+                f"AppCard{{background-color:{card_bg};"
                 f"border-radius:10px;border:2px solid {base_border};"
                 f"color:{colors['text']};}}"
-                f"AppCard:hover{{background-color:{colors['card_hover_bg']};"
+                f"AppCard:hover{{background-color:{card_hover_bg};"
                 f"border:2px solid {hover_border};}}"
             )
 
@@ -514,8 +553,8 @@ class AppGrid(QWidget):
         self.section_widgets = []
         self.setAcceptDrops(True)
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setSpacing(22)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        self.main_layout.setSpacing(10)
+        self.main_layout.setContentsMargins(20, 14, 20, 20)
         self.rebuild_grid()
 
     def rebuild_grid(self):
@@ -529,9 +568,9 @@ class AppGrid(QWidget):
         self.section_widgets = []
         cols = self.layout_settings["max_columns"]
         card_size = self.layout_settings["badge_size"]
-        header_font_size = max(14, int(card_size * 0.12))
+        header_font_size = max(11, int(card_size * 0.09))
         h_spacing = max(12, int(card_size * 0.15))
-        v_spacing = max(12, int(card_size * 0.12))
+        v_spacing = max(8, int(card_size * 0.08))
 
         for group_index, group_name in enumerate(self.group_names):
             last_index = len(self.group_names) - 1
@@ -540,12 +579,24 @@ class AppGrid(QWidget):
                 if min(self.app_group_assignments.get(name, last_index), last_index) == group_index
             ]
 
+            header_row = QWidget()
+            header_row.setObjectName("group_header_row")
+            header_layout = QHBoxLayout(header_row)
+            header_layout.setContentsMargins(0, 0, 0, 0)
+            header_layout.setSpacing(10)
             header = QLabel(group_name)
             header.setObjectName("group_header")
             header.setFont(QFont("Arial", header_font_size, QFont.Bold))
+            header.setFixedHeight(max(18, header_font_size + 6))
+            divider = QFrame()
+            divider.setObjectName("group_divider")
+            divider.setFrameShape(QFrame.HLine)
+            divider.setFixedHeight(1)
+            header_layout.addWidget(header, 0, Qt.AlignVCenter)
+            header_layout.addWidget(divider, 1, Qt.AlignVCenter)
             self.group_labels.append(header)
-            self.group_sections.append((group_index, header))
-            self.main_layout.addWidget(header)
+            self.group_sections.append((group_index, header_row))
+            self.main_layout.addWidget(header_row)
 
             section = QWidget()
             section.setObjectName("group_section")
@@ -553,7 +604,7 @@ class AppGrid(QWidget):
             section_layout = QGridLayout(section)
             section_layout.setHorizontalSpacing(h_spacing)
             section_layout.setVerticalSpacing(v_spacing)
-            section_layout.setContentsMargins(0, 0, 0, 0)
+            section_layout.setContentsMargins(0, 0, 0, 4)
 
             for i, name in enumerate(group_apps):
                 config = get_app_config(self.apps[name])
@@ -670,14 +721,22 @@ class AppGrid(QWidget):
                 background-color: {colors['page_bg']};
                 border: none;
             }}
+            QWidget#group_header_row {{
+                background-color: {colors['page_bg']};
+                border: none;
+            }}
+            QFrame#group_divider {{
+                background-color: {colors['border']};
+                border: none;
+            }}
         """)
         for card in self.cards:
             card.set_theme(self.theme_name)
         for label in self.group_labels:
             label.setStyleSheet(
                 f"color: {colors['text']};"
-                f"padding: 4px 2px 8px 2px;"
-                f"border-bottom: 1px solid {colors['border']};"
+                f"padding: 0 2px;"
+                f"background-color: {colors['page_bg']};"
             )
 
     def update_groups(self, group_names):
