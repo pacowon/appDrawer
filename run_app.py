@@ -24,24 +24,36 @@ def run_shell_command(command, work_dir):
         subprocess.Popen(["/bin/bash", "-lc", command], cwd=work_dir, env=launch_env())
 
 
+def terminal_shell_command(command):
+    return (
+        f"{command}\n"
+        "status=$?\n"
+        "echo\n"
+        "echo \"[AppDrawer] Command exited with status ${status}.\"\n"
+        "echo \"[AppDrawer] Starting an interactive shell. Type 'exit' to close this terminal.\"\n"
+        "exec \"${SHELL:-/bin/bash}\" -i"
+    )
+
+
 def run_terminal_command(command, work_dir):
     if os.name == "nt":
         subprocess.Popen(f'start cmd /k "{command}"', cwd=work_dir, shell=True, env=launch_env())
         return
 
+    terminal_command = terminal_shell_command(command)
     terminal = os.environ.get("TERMINAL")
     if terminal and shutil.which(terminal):
-        subprocess.Popen([terminal, "-e", "bash", "-lc", command], cwd=work_dir, env=launch_env())
+        subprocess.Popen([terminal, "-e", "bash", "-lc", terminal_command], cwd=work_dir, env=launch_env())
         return
 
     launchers = [
-        ("x-terminal-emulator", ["x-terminal-emulator", "-e", "bash", "-lc", command]),
-        ("gnome-terminal", ["gnome-terminal", "--", "bash", "-lc", command]),
-        ("konsole", ["konsole", "-e", "bash", "-lc", command]),
-        ("xfce4-terminal", ["xfce4-terminal", "-e", f"bash -lc {command!r}"]),
-        ("lxterminal", ["lxterminal", "-e", "bash", "-lc", command]),
-        ("mate-terminal", ["mate-terminal", "--", "bash", "-lc", command]),
-        ("xterm", ["xterm", "-e", "bash", "-lc", command]),
+        ("x-terminal-emulator", ["x-terminal-emulator", "-e", "bash", "-lc", terminal_command]),
+        ("gnome-terminal", ["gnome-terminal", "--", "bash", "-lc", terminal_command]),
+        ("konsole", ["konsole", "-e", "bash", "-lc", terminal_command]),
+        ("xfce4-terminal", ["xfce4-terminal", "--command", f"bash -lc {terminal_command!r}"]),
+        ("lxterminal", ["lxterminal", "-e", "bash", "-lc", terminal_command]),
+        ("mate-terminal", ["mate-terminal", "--", "bash", "-lc", terminal_command]),
+        ("xterm", ["xterm", "-e", "bash", "-lc", terminal_command]),
     ]
     for executable, args in launchers:
         if shutil.which(executable):
