@@ -8,6 +8,7 @@ import re
 import shutil
 import shlex
 import ctypes
+import signal
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
@@ -978,6 +979,7 @@ class XTermEmbeddedWidget(QWidget):
         self._start_requested = False
         self._start_attempts = 0
         self._last_start_size = None
+        self._last_synced_size = None
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
@@ -998,6 +1000,16 @@ class XTermEmbeddedWidget(QWidget):
         self.host.installEventFilter(self)
         layout.addWidget(self.host, 1)
         self.setFocusProxy(self.host)
+
+    def _install_parent_resize_filters(self):
+        widget = self.parentWidget()
+        while widget:
+            widget.installEventFilter(self)
+            widget = widget.parentWidget()
+
+    def _queue_sync_xterm_size(self):
+        for delay in (0, 40, 120, 250):
+            QTimer.singleShot(delay, self._sync_xterm_size)
 
     def _shell_path(self):
         shell = os.environ.get("SHELL")
@@ -1086,19 +1098,31 @@ class XTermEmbeddedWidget(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._install_parent_resize_filters()
         if not self._start_requested:
             self._start_requested = True
             self.host.winId()
             QTimer.singleShot(0, self._start_xterm)
+        self._queue_sync_xterm_size()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        QTimer.singleShot(0, self._sync_xterm_size)
+        self._queue_sync_xterm_size()
 
     def eventFilter(self, obj, event):
-        if obj is self.host and event.type() == QEvent.Resize:
-            QTimer.singleShot(0, self._sync_xterm_size)
+        if event.type() == QEvent.Resize and (
+            obj is self.host or obj is self or obj in self._parent_widgets()
+        ):
+            self._queue_sync_xterm_size()
         return super().eventFilter(obj, event)
+
+    def _parent_widgets(self):
+        widgets = []
+        widget = self.parentWidget()
+        while widget:
+            widgets.append(widget)
+            widget = widget.parentWidget()
+        return widgets
 
     def _x11_display(self):
         try:
@@ -1107,6 +1131,7 @@ class XTermEmbeddedWidget(QWidget):
             x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
             x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
             x11.XFlush.argtypes = [ctypes.c_void_p]
+            x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
             x11.XFree.argtypes = [ctypes.c_void_p]
             x11.XQueryTree.argtypes = [
                 ctypes.c_void_p,
@@ -1213,16 +1238,26 @@ class XTermEmbeddedWidget(QWidget):
                 )
                 pending.extend(self._child_windows(x11, display, current))
             x11.XFlush(ctypes.c_void_p(display))
+            x11.XSync(ctypes.c_void_p(display), ctypes.c_int(False))
         finally:
             x11.XCloseDisplay(ctypes.c_void_p(display))
 
     def _sync_xterm_size(self):
         if not self.process or self.process.poll() is not None:
             return
+        target_size = (self.host.width(), self.host.height())
+        if target_size[0] <= 1 or target_size[1] <= 1:
+            return
         window_id = self._find_xterm_window()
         if not window_id:
             return
-        self._resize_x11_tree(window_id, self.host.width(), self.host.height())
+        self._resize_x11_tree(window_id, target_size[0], target_size[1])
+        if self._last_synced_size != target_size:
+            self._last_synced_size = target_size
+            try:
+                os.kill(self.process.pid, signal.SIGWINCH)
+            except Exception:
+                pass
 
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
