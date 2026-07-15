@@ -28,18 +28,53 @@ from icon import make_heart_icon
 from appSetting import APP_REGISTRY, get_app_config
 
 # ── 앱 순서 영속화 ──────────────────────────────────────────
-ORDER_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_order.json")
-THEME_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_theme.json")
-USAGE_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_usage.json")
-GROUPS_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_groups.json")
-GROUP_ASSIGNMENTS_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_group_assignments.json")
-LAYOUT_FILE = os.path.join(os.path.expanduser("~"), "mxby", ".appdrawer_layout.json")
+APP_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+USER_CONFIG_DIR = os.path.join(os.path.expanduser("~"), "mxby")
+ORDER_FILE = os.path.join(USER_CONFIG_DIR, ".appdrawer_order.json")
+THEME_FILE = os.path.join(USER_CONFIG_DIR, ".appdrawer_theme.json")
+USAGE_FILE = os.path.join(USER_CONFIG_DIR, ".appdrawer_usage.json")
+GROUPS_FILE = os.path.join(USER_CONFIG_DIR, ".appdrawer_groups.json")
+GROUP_ASSIGNMENTS_FILE = os.path.join(USER_CONFIG_DIR, ".appdrawer_group_assignments.json")
+LAYOUT_FILE = os.path.join(USER_CONFIG_DIR, ".appdrawer_layout.json")
+DEFAULT_CONFIG_FILES = {
+    ORDER_FILE: os.path.join(APP_DIR, ".appdrawer_order.json"),
+    GROUPS_FILE: os.path.join(APP_DIR, ".appdrawer_groups.json"),
+    GROUP_ASSIGNMENTS_FILE: os.path.join(APP_DIR, ".appdrawer_group_assignments.json"),
+    LAYOUT_FILE: os.path.join(APP_DIR, ".appdrawer_layout.json"),
+}
 MAX_USAGE_HISTORY = 500
 
 DEFAULT_LAYOUT_SETTINGS = {
     "max_columns": 5,
     "badge_size": 130,
 }
+
+
+def seed_user_config_file(user_path):
+    default_path = DEFAULT_CONFIG_FILES.get(user_path)
+    if os.path.exists(user_path) or not default_path or not os.path.exists(default_path):
+        return False
+    try:
+        os.makedirs(os.path.dirname(user_path), exist_ok=True)
+        shutil.copyfile(default_path, user_path)
+        return True
+    except Exception as e:
+        print(f"[seed_user_config_file error] {user_path}: {e}")
+        return False
+
+
+def reset_user_config_file(user_path):
+    default_path = DEFAULT_CONFIG_FILES.get(user_path)
+    try:
+        os.makedirs(os.path.dirname(user_path), exist_ok=True)
+        if default_path and os.path.exists(default_path):
+            shutil.copyfile(default_path, user_path)
+            return True
+        if os.path.exists(user_path):
+            os.remove(user_path)
+    except Exception as e:
+        print(f"[reset_user_config_file error] {user_path}: {e}")
+    return False
 
 THEMES = {
     "light": {
@@ -177,6 +212,7 @@ def save_order(order):
         print(f"[save_order error] {e}")
 
 def load_order(default_keys):
+    seed_user_config_file(ORDER_FILE)
     if not os.path.exists(ORDER_FILE):
         return list(default_keys)
     try:
@@ -295,6 +331,8 @@ def _default_group_assignments(app_names):
 
 def ensure_group_files(app_names):
     os.makedirs(os.path.dirname(GROUPS_FILE), exist_ok=True)
+    seed_user_config_file(GROUPS_FILE)
+    seed_user_config_file(GROUP_ASSIGNMENTS_FILE)
     if not os.path.exists(GROUPS_FILE):
         save_group_names(_default_group_names())
     if not os.path.exists(GROUP_ASSIGNMENTS_FILE):
@@ -302,6 +340,7 @@ def ensure_group_files(app_names):
 
 
 def load_group_names():
+    seed_user_config_file(GROUPS_FILE)
     if not os.path.exists(GROUPS_FILE):
         return _default_group_names()
     try:
@@ -325,6 +364,7 @@ def save_group_names(group_names):
 
 
 def load_group_assignments(app_names):
+    seed_user_config_file(GROUP_ASSIGNMENTS_FILE)
     default_assignments = _default_group_assignments(app_names)
     if not os.path.exists(GROUP_ASSIGNMENTS_FILE):
         return dict(default_assignments)
@@ -370,6 +410,7 @@ def _sanitize_layout_settings(data):
 
 
 def load_layout_settings():
+    seed_user_config_file(LAYOUT_FILE)
     if not os.path.exists(LAYOUT_FILE):
         return dict(DEFAULT_LAYOUT_SETTINGS)
     try:
@@ -765,6 +806,12 @@ class AppGrid(QWidget):
 
     def update_layout_settings(self, layout_settings):
         self.layout_settings = _sanitize_layout_settings(layout_settings)
+        self.rebuild_grid()
+
+    def update_order(self, app_order):
+        valid = [name for name in app_order if name in self.apps]
+        missing = [name for name in self.apps.keys() if name not in valid]
+        self.app_order = valid + missing
         self.rebuild_grid()
 
 
@@ -1402,6 +1449,8 @@ class MainWindow(QMainWindow):
         self.settings_layout.addWidget(self._build_layout_panel())
         self.settings_layout.addSpacing(18)
         self.settings_layout.addWidget(self._build_groups_panel())
+        self.settings_layout.addSpacing(18)
+        self.settings_layout.addWidget(self._build_reset_panel())
         self.settings_layout.addStretch()
         self.settings_panel = panel
 
@@ -1472,6 +1521,22 @@ class MainWindow(QMainWindow):
 
         self.groups_panel = panel
         self.rebuild_group_fields()
+        return panel
+
+    def _build_reset_panel(self):
+        panel = QGroupBox("Reset")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 26, 20, 20)
+        layout.setSpacing(10)
+
+        desc = QLabel("Reset app order, groups, group assignments, and layout from default files next to the executable.")
+        desc.setWordWrap(True)
+        self.reset_settings_btn = QPushButton("Reset Groups / Order / Layout")
+        self.reset_settings_btn.clicked.connect(self.reset_settings_from_default_files)
+
+        layout.addWidget(desc)
+        layout.addWidget(self.reset_settings_btn, 0, Qt.AlignRight)
+        self.reset_panel = panel
         return panel
 
     def rebuild_group_fields(self):
@@ -1547,6 +1612,33 @@ class MainWindow(QMainWindow):
         save_layout_settings(self.layout_settings)
         for grid in self.findChildren(AppGrid):
             grid.update_layout_settings(self.layout_settings)
+        self.apply_theme(self.current_theme_name)
+
+    def reset_settings_from_default_files(self):
+        reset_user_config_file(ORDER_FILE)
+        reset_user_config_file(GROUPS_FILE)
+        reset_user_config_file(GROUP_ASSIGNMENTS_FILE)
+        reset_user_config_file(LAYOUT_FILE)
+
+        app_names = list(self.apps.keys())
+        self.group_names = load_group_names()
+        self.applied_group_names = list(self.group_names)
+        self.app_group_assignments = load_group_assignments(app_names)
+        self.layout_settings = load_layout_settings()
+        app_order = load_order(app_names)
+
+        if hasattr(self, "columns_spin"):
+            self.columns_spin.setValue(self.layout_settings["max_columns"])
+        if hasattr(self, "badge_size_spin"):
+            self.badge_size_spin.setValue(self.layout_settings["badge_size"])
+
+        for grid in self.findChildren(AppGrid):
+            grid.app_group_assignments = self.app_group_assignments
+            grid.update_groups(self.group_names)
+            grid.update_layout_settings(self.layout_settings)
+            grid.update_order(app_order)
+
+        self.rebuild_group_fields()
         self.apply_theme(self.current_theme_name)
 
     def on_theme_button_clicked(self, theme_name):
@@ -1835,21 +1927,44 @@ class MainWindow(QMainWindow):
                     padding: 8px 10px;
                 }}
             """)
-        for button_name in ["add_group_btn", "remove_group_btn", "apply_groups_btn"]:
+        if hasattr(self, "reset_panel"):
+            self.reset_panel.setStyleSheet(f"""
+                QGroupBox {{
+                    background-color: {colors['panel_bg']};
+                    border: 1px solid {colors['border']};
+                    border-radius: 14px;
+                    color: {colors['text']};
+                    font-size: 15px;
+                    font-weight: bold;
+                    padding-top: 12px;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 18px;
+                    top: 10px;
+                    padding: 0 8px;
+                    background-color: {colors['panel_bg']};
+                }}
+                QLabel {{
+                    color: {colors['muted_text']};
+                }}
+            """)
+        for button_name in ["add_group_btn", "remove_group_btn", "apply_groups_btn", "reset_settings_btn"]:
             if hasattr(self, button_name):
                 button = getattr(self, button_name)
+                is_primary = button_name in {"apply_groups_btn", "reset_settings_btn"}
                 button.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: {colors['panel_alt_bg'] if button_name != 'apply_groups_btn' else colors['accent']};
-                        color: {colors['text'] if button_name != 'apply_groups_btn' else '#ffffff'};
-                        border: 1px solid {colors['border'] if button_name != 'apply_groups_btn' else colors['accent']};
+                        background-color: {colors['accent'] if is_primary else colors['panel_alt_bg']};
+                        color: {'#ffffff' if is_primary else colors['text']};
+                        border: 1px solid {colors['accent'] if is_primary else colors['border']};
                         border-radius: 10px;
                         padding: 10px 14px;
                         font-size: 12px;
                         font-weight: bold;
                     }}
                     QPushButton:hover {{
-                        background-color: {colors['card_hover_bg'] if button_name != 'apply_groups_btn' else colors['accent_hover']};
+                        background-color: {colors['accent_hover'] if is_primary else colors['card_hover_bg']};
                     }}
                     QPushButton:disabled {{
                         color: {colors['muted_text']};
