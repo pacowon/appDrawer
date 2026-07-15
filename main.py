@@ -1721,255 +1721,34 @@ class MainWindow(QMainWindow):
         colors = THEMES[self.current_theme_name]
 
         self.setStyleSheet("")
-        if hasattr(self, "centralwidget"):
-            self.centralwidget.setStyleSheet(
-                f"QWidget#centralwidget {{ background-color: {colors['window_bg']}; }}"
+        self._clear_non_drawer_theme_styles()
+
+        if hasattr(self, "apps_page"):
+            self.apps_page.setStyleSheet(
+                f"QWidget#apps_page {{ background-color: {colors['page_bg']}; }}"
             )
-        for page_name in ["apps_page", "settings_page", "profile_page"]:
-            if hasattr(self, page_name):
-                getattr(self, page_name).setStyleSheet(
-                    f"QWidget#{page_name} {{ background-color: {colors['page_bg']}; }}"
-                )
 
-        if hasattr(self, "apps_tab_widget"):
-            self.apps_tab_widget.setStyleSheet(f"""
-                QTabWidget#apps_tab_widget::pane {{
-                    border: 1px solid {colors['border']};
-                    background: {colors['panel_bg']};
-                }}
-                QTabBar#apps_main_tab_bar::tab {{
-                    background: {colors['panel_alt_bg']};
-                    color: {colors['text']};
-                    padding: 10px 20px;
-                    margin-right: 2px;
-                    border: 1px solid {colors['border']};
-                    border-bottom: none;
-                    border-top-left-radius: 5px;
-                    border-top-right-radius: 5px;
-                }}
-                QTabBar#apps_main_tab_bar::tab:selected {{
-                    background: {colors['panel_bg']};
-                    color: {colors['text']};
-                    border-bottom: 1px solid {colors['panel_bg']};
-                }}
-                QTabBar#apps_main_tab_bar::tab:hover {{
-                    background: {colors['card_hover_bg']};
-                    color: {colors['text']};
-                }}
-            """)
-
-        self.sidebar.setStyleSheet(f"background-color: {colors['sidebar_bg']};")
-        self.toggle_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {colors['sidebar_bg']};
-                color: {colors['sidebar_text']};
-                border: none;
-                font-size: 20px;
-            }}
-            QPushButton:hover {{
-                background-color: {colors['sidebar_hover']};
-            }}
-        """)
-        self._apply_sidebar_button_styles()
-
-        if hasattr(self, "settings_panel"):
-            self.settings_panel.setStyleSheet(f"""
-                QGroupBox {{
-                    background-color: {colors['panel_bg']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 14px;
-                    color: {colors['text']};
-                    font-size: 15px;
-                    font-weight: bold;
-                    padding-top: 12px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 18px;
-                    top: 10px;
-                    padding: 0 8px;
-                    background-color: {colors['panel_bg']};
-                }}
-            """)
-        if hasattr(self, "layout_panel"):
-            self.layout_panel.setStyleSheet(f"""
-                QGroupBox {{
-                    background-color: {colors['panel_bg']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 14px;
-                    color: {colors['text']};
-                    font-size: 15px;
-                    font-weight: bold;
-                    padding-top: 12px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 18px;
-                    top: 10px;
-                    padding: 0 8px;
-                    background-color: {colors['panel_bg']};
-                }}
-                QLabel {{
-                    color: {colors['text']};
-                }}
-                QSpinBox {{
-                    background-color: {colors['input_bg']};
-                    color: {colors['text']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 8px;
-                    padding: 6px 8px;
-                }}
-            """)
-        if hasattr(self, "groups_panel"):
-            self.groups_panel.setStyleSheet(f"""
-                QGroupBox {{
-                    background-color: {colors['panel_bg']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 14px;
-                    color: {colors['text']};
-                    font-size: 15px;
-                    font-weight: bold;
-                    padding-top: 12px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 18px;
-                    top: 10px;
-                    padding: 0 8px;
-                    background-color: {colors['panel_bg']};
-                }}
-                QLineEdit {{
-                    background-color: {colors['input_bg']};
-                    color: {colors['text']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 8px;
-                    padding: 8px 10px;
-                }}
-            """)
-        if hasattr(self, "reset_panel"):
-            self.reset_panel.setStyleSheet(f"""
-                QGroupBox {{
-                    background-color: {colors['panel_bg']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 14px;
-                    color: {colors['text']};
-                    font-size: 15px;
-                    font-weight: bold;
-                    padding-top: 12px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 18px;
-                    top: 10px;
-                    padding: 0 8px;
-                    background-color: {colors['panel_bg']};
-                }}
-                QLabel {{
-                    color: {colors['muted_text']};
-                }}
-            """)
-        for button_name in ["add_group_btn", "remove_group_btn", "apply_groups_btn", "reset_settings_btn"]:
-            if hasattr(self, button_name):
-                button = getattr(self, button_name)
-                is_primary = button_name in {"apply_groups_btn", "reset_settings_btn"}
-                button.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {colors['accent'] if is_primary else colors['panel_alt_bg']};
-                        color: {'#ffffff' if is_primary else colors['text']};
-                        border: 1px solid {colors['accent'] if is_primary else colors['border']};
-                        border-radius: 10px;
-                        padding: 10px 14px;
-                        font-size: 12px;
-                        font-weight: bold;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {colors['accent_hover'] if is_primary else colors['card_hover_bg']};
-                    }}
-                    QPushButton:disabled {{
-                        color: {colors['muted_text']};
-                    }}
-                """)
-        if hasattr(self, "apply_layout_btn"):
-            self.apply_layout_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {colors['accent']};
-                    color: #ffffff;
-                    border: 1px solid {colors['accent']};
-                    border-radius: 10px;
-                    padding: 10px 14px;
-                    font-size: 12px;
-                    font-weight: bold;
-                }}
-                QPushButton:hover {{
-                    background-color: {colors['accent_hover']};
-                }}
-            """)
-        if hasattr(self, "profile_panel"):
-            self.profile_panel.setStyleSheet(f"""
-                QGroupBox {{
-                    background-color: {colors['panel_bg']};
-                    border: 1px solid {colors['border']};
-                    border-radius: 14px;
-                    color: {colors['text']};
-                    font-size: 15px;
-                    font-weight: bold;
-                    padding-top: 12px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 18px;
-                    top: 10px;
-                    padding: 0 8px;
-                    background-color: {colors['panel_bg']};
-                }}
-            """)
-        if hasattr(self, "profile_summary_label"):
-            self.profile_summary_label.setStyleSheet(
-                f"color: {colors['muted_text']}; font-size: 12px; padding: 0 2px 4px 2px;"
-            )
-        if hasattr(self, "profile_table"):
-            self.profile_table.setStyleSheet(f"""
-                QTableWidget {{
-                    background-color: {colors['panel_bg']};
-                    color: {colors['text']};
-                    border: none;
-                    gridline-color: {colors['border']};
-                    outline: 0;
-                }}
-                QHeaderView::section {{
-                    background-color: {colors['panel_alt_bg']};
-                    color: {colors['text']};
-                    border: none;
-                    border-bottom: 1px solid {colors['border']};
-                    padding: 8px;
-                    font-weight: bold;
-                }}
-                QTableWidget::item {{
-                    padding: 8px;
-                    border-bottom: 1px solid {colors['border']};
-                }}
-            """)
         if hasattr(self, "theme_buttons"):
             for theme_name, button in self.theme_buttons.items():
                 is_active = theme_name == self.current_theme_name
                 button.setChecked(is_active)
-                button.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {colors['accent'] if is_active else colors['panel_alt_bg']};
-                        color: {"#ffffff" if is_active else colors['text']};
-                        border: 1px solid {colors['accent'] if is_active else colors['border']};
-                        border-radius: 10px;
-                        padding: 12px 18px;
-                        font-size: 13px;
-                        font-weight: bold;
-                        min-width: 88px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {colors['accent_hover'] if is_active else colors['card_hover_bg']};
-                    }}
-                """)
 
         self._apply_theme_to_dynamic_widgets()
+
+    def _clear_non_drawer_theme_styles(self):
+        for widget_name in [
+            "centralwidget", "settings_page", "profile_page", "apps_tab_widget",
+            "sidebar", "toggle_btn", "settings_panel", "layout_panel",
+            "groups_panel", "reset_panel", "apply_layout_btn",
+            "profile_panel", "profile_summary_label", "profile_table",
+            "add_group_btn", "remove_group_btn", "apply_groups_btn",
+            "reset_settings_btn", "btn_apps", "btn_settings", "btn_profile",
+        ]:
+            if hasattr(self, widget_name):
+                getattr(self, widget_name).setStyleSheet("")
+        if hasattr(self, "theme_buttons"):
+            for button in self.theme_buttons.values():
+                button.setStyleSheet("")
 
     def _apply_theme_to_dynamic_widgets(self):
         colors = THEMES[self.current_theme_name]
@@ -1980,9 +1759,7 @@ class MainWindow(QMainWindow):
         for grid in self.findChildren(AppGrid):
             grid.set_theme(self.current_theme_name)
 
-        for path_bar in self._tab_path_bars.values():
-            if isinstance(path_bar, PathBar):
-                path_bar.apply_theme(colors, disabled=not path_bar.isEnabled())
+        # Do not theme running tools or generic controls. Only app drawer cards/grid are themed.
 
     def _apply_sidebar_button_styles(self):
         colors = THEMES[self.current_theme_name]
@@ -2133,7 +1910,6 @@ class MainWindow(QMainWindow):
         self._tab_path_bars[id(tab_container)] = path_bar   # container로도 조회 가능
         # tab_stack → tab_container 역방향 매핑 (탭 인덱스 조회용)
         self._stack_to_container[id(tab_stack)] = tab_container
-        path_bar.apply_theme(THEMES[self.current_theme_name], disabled=False)
         container_layout.addWidget(tab_stack, 1)
         container_layout.addWidget(path_bar)
 
@@ -2174,7 +1950,7 @@ class MainWindow(QMainWindow):
         # 해당 탭의 PathBar 비활성화 + 시각적 표시
         path_bar = self._tab_path_bars.get(id(tab_stack))
         if path_bar:
-            path_bar.apply_theme(THEMES[self.current_theme_name], disabled=True)
+            path_bar.setEnabled(False)
 
         def go_back():
             current_page = tab_stack.currentWidget()
@@ -2189,23 +1965,10 @@ class MainWindow(QMainWindow):
                 self.apps_tab_widget.setTabText(idx, default_tab_name)
             # PathBar 원래 스타일로 복원
             if path_bar:
-                path_bar.apply_theme(THEMES[self.current_theme_name], disabled=False)
+                path_bar.setEnabled(True)
 
         back_btn = QPushButton("← Return to Menu")
         back_btn.clicked.connect(go_back)
-        colors = THEMES[self.current_theme_name]
-        back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {colors['accent']};
-                color: white;
-                border: none;
-                padding: 10px;
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {colors['accent_hover']};
-            }}
-        """)
         target_path = self._get_tab_path(tab_stack)
         previous_cwd = os.getcwd()
         try:
@@ -2234,7 +1997,7 @@ class MainWindow(QMainWindow):
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             if path_bar:
-                path_bar.apply_theme(THEMES[self.current_theme_name], disabled=False)
+                path_bar.setEnabled(True)
             self.launch_app_popup(app_name, work_dir=target_path, log_click=False)
         finally:
             os.chdir(previous_cwd)
