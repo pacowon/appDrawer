@@ -1008,7 +1008,7 @@ class XTermEmbeddedWidget(QWidget):
             widget = widget.parentWidget()
 
     def _queue_sync_xterm_size(self):
-        for delay in (0, 40, 120, 250):
+        for delay in (0, 40, 120, 250, 500, 900):
             QTimer.singleShot(delay, self._sync_xterm_size)
 
     def _shell_path(self):
@@ -1057,7 +1057,6 @@ class XTermEmbeddedWidget(QWidget):
             return
 
         shell = self._shell_path()
-        colors = THEMES[self.theme_name]
         command = self._terminal_shell_command(shell)
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
@@ -1070,9 +1069,11 @@ class XTermEmbeddedWidget(QWidget):
             "-fs", "10",
             "-sb",
             "-rightbar",
-            "-bg", colors["input_bg"],
-            "-fg", colors["text"],
+            "-bg", "#000000",
+            "-fg", "#f2f2f2",
+            "-cr", "#ffffff",
             "-xrm", "XTerm*selectToClipboard: true",
+            "-xrm", "XTerm*cursorBlink: true",
             "-e", shell, "-ic", command,
         ]
         try:
@@ -1259,6 +1260,9 @@ class XTermEmbeddedWidget(QWidget):
             except Exception:
                 pass
 
+    def force_sync_size(self):
+        self._queue_sync_xterm_size()
+
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.theme_name]
@@ -1317,6 +1321,10 @@ class EmbeddedTerminalWidget(QWidget):
         if self.terminal and hasattr(self.terminal, "stop"):
             self.terminal.stop()
 
+    def force_sync_size(self):
+        if self.terminal and hasattr(self.terminal, "force_sync_size"):
+            self.terminal.force_sync_size()
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1347,6 +1355,21 @@ class MainWindow(QMainWindow):
         self.content_stack.setCurrentWidget(self.apps_page)
         self.toggle_sidebar()
         self.apply_theme(self.current_theme_name)
+
+    def _sync_embedded_terminals(self):
+        for terminal in self.findChildren(EmbeddedTerminalWidget):
+            terminal.force_sync_size()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        for delay in (0, 80, 200, 500, 1000):
+            QTimer.singleShot(delay, self._sync_embedded_terminals)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.WindowStateChange:
+            for delay in (0, 120, 300, 700, 1200):
+                QTimer.singleShot(delay, self._sync_embedded_terminals)
 
     def setup_settings_page(self):
         while self.settings_layout.count():
