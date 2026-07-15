@@ -522,6 +522,7 @@ class AppCard(QFrame):
         name_lbl.setFixedHeight(title_height)
         name_lbl.setToolTip(self.app_name)
         name_lbl.setWordWrap(False)
+        self.name_lbl = name_lbl
 
         layout.addWidget(badge, 0, Qt.AlignHCenter)
         layout.addWidget(name_lbl, 0, Qt.AlignTop)
@@ -556,6 +557,8 @@ class AppCard(QFrame):
                 f"QFrame#app_card:hover{{background-color:{card_hover_bg};"
                 f"border:{border_width}px solid {hover_border};}}"
             )
+        if hasattr(self, "name_lbl"):
+            self.name_lbl.setStyleSheet(f"color: {colors['text']}; background: transparent;")
 
     def set_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
@@ -1717,18 +1720,16 @@ class MainWindow(QMainWindow):
         self.current_theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.current_theme_name]
 
-        self.setStyleSheet(f"""
-            QMainWindow, QWidget#centralwidget {{
-                background-color: {colors['window_bg']};
-            }}
-            QWidget#apps_page, QWidget#settings_page, QWidget#profile_page {{
-                background-color: {colors['page_bg']};
-            }}
-            QScrollArea#app_grid_scroll {{
-                border: none;
-                background-color: {colors['page_bg']};
-            }}
-        """)
+        self.setStyleSheet("")
+        if hasattr(self, "centralwidget"):
+            self.centralwidget.setStyleSheet(
+                f"QWidget#centralwidget {{ background-color: {colors['window_bg']}; }}"
+            )
+        for page_name in ["apps_page", "settings_page", "profile_page"]:
+            if hasattr(self, page_name):
+                getattr(self, page_name).setStyleSheet(
+                    f"QWidget#{page_name} {{ background-color: {colors['page_bg']}; }}"
+                )
 
         if hasattr(self, "apps_tab_widget"):
             self.apps_tab_widget.setStyleSheet(f"""
@@ -2165,6 +2166,8 @@ class MainWindow(QMainWindow):
             return
         record_app_usage(app_name, "tab")
         app_page = QWidget()
+        app_page.setObjectName("app_run_page")
+        app_page.setStyleSheet("")
         app_layout = QVBoxLayout(app_page)
         app_layout.setContentsMargins(0, 0, 0, 0)
 
