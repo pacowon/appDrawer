@@ -1720,112 +1720,23 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(f"""
             QMainWindow, QWidget#centralwidget {{
                 background-color: {colors['window_bg']};
-                color: {colors['text']};
             }}
             QWidget#apps_page, QWidget#settings_page, QWidget#profile_page {{
                 background-color: {colors['page_bg']};
-                color: {colors['text']};
             }}
-            QLabel {{
-                color: {colors['text']};
-            }}
-            QFrame {{
-                color: {colors['text']};
-            }}
-            QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QListWidget {{
-                background-color: {colors['input_bg']};
-                color: {colors['text']};
-                selection-background-color: {colors['accent']};
-                selection-color: #ffffff;
-            }}
-            QComboBox {{
-                background-color: {colors['input_bg']};
-                color: {colors['text']};
-                selection-background-color: {colors['accent']};
-                selection-color: #ffffff;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {colors['input_bg']};
-                color: {colors['text']};
-                selection-background-color: {colors['accent']};
-                selection-color: #ffffff;
-            }}
-            QLineEdit[readOnly="true"], QTextEdit[readOnly="true"], QPlainTextEdit[readOnly="true"] {{
-                background-color: {colors['panel_alt_bg']};
-            }}
-            QLineEdit::placeholder, QTextEdit::placeholder, QPlainTextEdit::placeholder {{
-                color: {colors['muted_text']};
-            }}
-            QCheckBox {{
-                color: {colors['text']};
-                background-color: {colors['page_bg']};
-            }}
-            QRadioButton {{
-                color: {colors['text']};
-                background-color: {colors['page_bg']};
-            }}
-            QListWidget::item:selected {{
-                background-color: {colors['accent']};
-                color: #ffffff;
-            }}
-            QTableWidget {{
-                background-color: {colors['input_bg']};
-                alternate-background-color: {colors['panel_alt_bg']};
-                color: {colors['text']};
-                selection-background-color: {colors['accent']};
-                selection-color: #ffffff;
-            }}
-            QTableCornerButton::section, QHeaderView::section {{
-                background-color: {colors['panel_alt_bg']};
-                color: {colors['text']};
-            }}
-            QMessageBox {{
-                background-color: {colors['panel_bg']};
-            }}
-            QMessageBox QLabel {{
-                color: {colors['text']};
-                background: transparent;
-            }}
-            QMessageBox QPushButton {{
-                background-color: {colors['panel_alt_bg']};
-                color: {colors['text']};
-            }}
-            QMessageBox QPushButton:hover {{
-                background-color: {colors['card_hover_bg']};
-            }}
-            QScrollArea {{
+            QScrollArea#app_grid_scroll {{
                 border: none;
                 background-color: {colors['page_bg']};
-            }}
-            QTabWidget::pane {{
-                border: 1px solid {colors['border']};
-                background: {colors['panel_bg']};
-            }}
-            QTabBar::tab {{
-                background: {colors['panel_alt_bg']};
-                color: {colors['text']};
-                padding: 10px 20px;
-                margin-right: 2px;
-                border: 1px solid {colors['border']};
-                border-bottom: none;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-            }}
-            QTabBar::tab:selected {{
-                background: {colors['panel_bg']};
-            }}
-            QTabBar::tab:hover {{
-                background: {colors['card_hover_bg']};
             }}
         """)
 
         if hasattr(self, "apps_tab_widget"):
             self.apps_tab_widget.setStyleSheet(f"""
-                QTabWidget::pane {{
+                QTabWidget#apps_tab_widget::pane {{
                     border: 1px solid {colors['border']};
                     background: {colors['panel_bg']};
                 }}
-                QTabBar::tab {{
+                QTabBar#apps_main_tab_bar::tab {{
                     background: {colors['panel_alt_bg']};
                     color: {colors['text']};
                     padding: 10px 20px;
@@ -1835,12 +1746,12 @@ class MainWindow(QMainWindow):
                     border-top-left-radius: 5px;
                     border-top-right-radius: 5px;
                 }}
-                QTabBar::tab:selected {{
+                QTabBar#apps_main_tab_bar::tab:selected {{
                     background: {colors['panel_bg']};
                     color: {colors['text']};
                     border-bottom: 1px solid {colors['panel_bg']};
                 }}
-                QTabBar::tab:hover {{
+                QTabBar#apps_main_tab_bar::tab:hover {{
                     background: {colors['card_hover_bg']};
                     color: {colors['text']};
                 }}
@@ -1899,6 +1810,13 @@ class MainWindow(QMainWindow):
                 }}
                 QLabel {{
                     color: {colors['text']};
+                }}
+                QSpinBox {{
+                    background-color: {colors['input_bg']};
+                    color: {colors['text']};
+                    border: 1px solid {colors['border']};
+                    border-radius: 8px;
+                    padding: 6px 8px;
                 }}
             """)
         if hasattr(self, "groups_panel"):
@@ -2061,9 +1979,6 @@ class MainWindow(QMainWindow):
         for grid in self.findChildren(AppGrid):
             grid.set_theme(self.current_theme_name)
 
-        for terminal in self.findChildren(EmbeddedTerminalWidget):
-            terminal.apply_theme(self.current_theme_name)
-
         for path_bar in self._tab_path_bars.values():
             if isinstance(path_bar, PathBar):
                 path_bar.apply_theme(colors, disabled=not path_bar.isEnabled())
@@ -2114,6 +2029,8 @@ class MainWindow(QMainWindow):
             if child.widget():
                 child.widget().deleteLater()
         self.apps_tab_widget = QTabWidget()
+        self.apps_tab_widget.setObjectName("apps_tab_widget")
+        self.apps_tab_widget.tabBar().setObjectName("apps_main_tab_bar")
         self.apps_tab_widget.setTabsClosable(True)
         self.apps_tab_widget.tabCloseRequested.connect(self.close_app_tab)
         self._tab_path_bars = {}         # {id(tab_stack): PathBar}
