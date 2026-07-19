@@ -907,7 +907,47 @@ class TerminalTextEdit(QPlainTextEdit):
         return char not in cls.PATH_SELECTION_DELIMITERS
 
 
+def _read_process_cwd(pid):
+    if os.name == "nt" or not pid:
+        return None
+    try:
+        cwd = os.readlink(f"/proc/{pid}/cwd")
+        return cwd if os.path.isdir(cwd) else None
+    except OSError:
+        return None
+
+
+def _process_tree_pids(pid):
+    if os.name == "nt" or not pid:
+        return []
+
+    result = []
+    pending = [pid]
+    seen = set()
+    while pending:
+        current = pending.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        result.append(current)
+        try:
+            with open(f"/proc/{current}/task/{current}/children", "r", encoding="utf-8") as f:
+                pending.extend(int(child) for child in f.read().split())
+        except (OSError, ValueError):
+            pass
+    return result
+
+
+def _active_process_cwd(pid):
+    for candidate_pid in reversed(_process_tree_pids(pid)):
+        cwd = _read_process_cwd(candidate_pid)
+        if cwd:
+            return cwd
+    return None
+
+
 class PtyTerminalWidget(QWidget):
+    currentPathChanged = pyqtSignal(str)
     ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
     def __init__(self, command, work_dir, theme_name="light", parent=None):
@@ -918,6 +958,10 @@ class PtyTerminalWidget(QWidget):
         self.master_fd = None
         self.process = None
         self.notifier = None
+        self._last_reported_cwd = None
+        self.cwd_timer = QTimer(self)
+        self.cwd_timer.setInterval(700)
+        self.cwd_timer.timeout.connect(self._poll_current_path)
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
@@ -977,6 +1021,8 @@ class PtyTerminalWidget(QWidget):
             self.notifier = QSocketNotifier(self.master_fd, QSocketNotifier.Read, self)
             self.notifier.activated.connect(self._read_pty)
             self.output.setFocus()
+            self._poll_current_path()
+            self.cwd_timer.start()
             if self.command:
                 QTimer.singleShot(150, lambda: self._write_bytes((self.command + "\r").encode()))
         except Exception as exc:
@@ -1004,6 +1050,17 @@ class PtyTerminalWidget(QWidget):
             except OSError:
                 pass
 
+    def current_work_dir(self):
+        if self.process:
+            return _active_process_cwd(self.process.pid) or self.work_dir
+        return self.work_dir
+
+    def _poll_current_path(self):
+        cwd = self.current_work_dir()
+        if cwd and cwd != self._last_reported_cwd:
+            self._last_reported_cwd = cwd
+            self.currentPathChanged.emit(cwd)
+
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.theme_name]
@@ -1021,6 +1078,8 @@ class PtyTerminalWidget(QWidget):
         """)
 
     def stop(self):
+        if self.cwd_timer:
+            self.cwd_timer.stop()
         if self.notifier:
             self.notifier.setEnabled(False)
             self.notifier.deleteLater()
@@ -1045,6 +1104,7 @@ class PtyTerminalWidget(QWidget):
 
 class XTermEmbeddedWidget(QWidget):
     failed = pyqtSignal()
+    currentPathChanged = pyqtSignal(str)
     PATH_CHAR_CLASS = "33:48,35-38:48,42-43:48,45-47:48,58:48,61:48,63-64:48,92:48,95:48,126:48"
 
     def __init__(self, command, work_dir, theme_name="light", parent=None):
@@ -1058,6 +1118,10 @@ class XTermEmbeddedWidget(QWidget):
         self._start_attempts = 0
         self._last_start_size = None
         self._last_synced_size = None
+        self._last_reported_cwd = None
+        self.cwd_timer = QTimer(self)
+        self.cwd_timer.setInterval(700)
+        self.cwd_timer.timeout.connect(self._poll_current_path)
         self._setup_ui()
         self.apply_theme(self.theme_name)
         self.destroyed.connect(lambda: self.stop())
@@ -1158,6 +1222,8 @@ class XTermEmbeddedWidget(QWidget):
         try:
             self.process = subprocess.Popen(["xterm"] + args, cwd=self.work_dir, env=env)
             self.host.setFocus()
+            self._poll_current_path()
+            self.cwd_timer.start()
             for delay in (100, 200, 350, 500, 800, 1200, 1800):
                 QTimer.singleShot(delay, self._sync_xterm_size)
             QTimer.singleShot(900, self._check_startup_failed)
@@ -1342,6 +1408,17 @@ class XTermEmbeddedWidget(QWidget):
     def force_sync_size(self):
         self._queue_sync_xterm_size()
 
+    def current_work_dir(self):
+        if self.process:
+            return _active_process_cwd(self.process.pid) or self.work_dir
+        return self.work_dir
+
+    def _poll_current_path(self):
+        cwd = self.current_work_dir()
+        if cwd and cwd != self._last_reported_cwd:
+            self._last_reported_cwd = cwd
+            self.currentPathChanged.emit(cwd)
+
     def apply_theme(self, theme_name):
         self.theme_name = theme_name if theme_name in THEMES else "light"
         colors = THEMES[self.theme_name]
@@ -1357,6 +1434,8 @@ class XTermEmbeddedWidget(QWidget):
         """)
 
     def stop(self):
+        if self.cwd_timer:
+            self.cwd_timer.stop()
         if self.process and self.process.poll() is None:
             self.process.terminate()
             try:
@@ -1366,6 +1445,8 @@ class XTermEmbeddedWidget(QWidget):
 
 
 class EmbeddedTerminalWidget(QWidget):
+    currentPathChanged = pyqtSignal(str)
+
     def __init__(self, command, work_dir, theme_name="light", parent=None):
         super().__init__(parent)
         self.theme_name = theme_name if theme_name in THEMES else "light"
@@ -1379,7 +1460,14 @@ class EmbeddedTerminalWidget(QWidget):
             self.terminal.failed.connect(
                 lambda c=command, w=work_dir: self._fallback_to_pty(c, w)
             )
+        self._connect_terminal_path_signal()
         layout.addWidget(self.terminal, 1)
+
+    def _connect_terminal_path_signal(self):
+        if self.terminal and hasattr(self.terminal, "currentPathChanged"):
+            self.terminal.currentPathChanged.connect(
+                lambda path: self.currentPathChanged.emit(path)
+            )
 
     def _fallback_to_pty(self, command, work_dir):
         if isinstance(self.terminal, PtyTerminalWidget):
@@ -1389,6 +1477,7 @@ class EmbeddedTerminalWidget(QWidget):
         old_terminal.stop()
         old_terminal.deleteLater()
         self.terminal = PtyTerminalWidget(command, work_dir, self.theme_name)
+        self._connect_terminal_path_signal()
         self.layout().addWidget(self.terminal, 1)
 
     def apply_theme(self, theme_name):
@@ -1403,6 +1492,11 @@ class EmbeddedTerminalWidget(QWidget):
     def force_sync_size(self):
         if self.terminal and hasattr(self.terminal, "force_sync_size"):
             self.terminal.force_sync_size()
+
+    def current_work_dir(self):
+        if self.terminal and hasattr(self.terminal, "current_work_dir"):
+            return self.terminal.current_work_dir()
+        return None
 
 
 class MainWindow(QMainWindow):
@@ -2169,6 +2263,14 @@ class MainWindow(QMainWindow):
             folder_name = os.path.normpath(work_dir)
         return f"{folder_name} : {app_name}"
 
+    def _update_running_tab_name(self, tab_container, app_name, work_dir):
+        tab_index = self.apps_tab_widget.indexOf(tab_container) if tab_container else -1
+        if tab_index >= 0:
+            self.apps_tab_widget.setTabText(
+                tab_index,
+                self._format_running_tab_name(app_name, work_dir),
+            )
+
     def _get_active_tab_path(self):
         """현재 활성 탭의 PathBar 경로 반환 (팝업용)"""
         idx = self.apps_tab_widget.currentIndex()
@@ -2338,6 +2440,10 @@ class MainWindow(QMainWindow):
                 app_widget = EmbeddedTerminalWidget(command, target_path, self.current_theme_name)
             else:
                 app_widget = app_config["app_class"]()
+            if hasattr(app_widget, "currentPathChanged"):
+                app_widget.currentPathChanged.connect(
+                    lambda path, c=tab_container, a=app_name: self._update_running_tab_name(c, a, path)
+                )
             if hasattr(app_widget, "set_path_provider"):
                 app_widget.set_path_provider(lambda s=tab_stack: self._get_tab_path(s))
 
