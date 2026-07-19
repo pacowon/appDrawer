@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier, QEvent
-from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor
+from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor, QTextCursor
 from PyQt5.uic import loadUi
 
 from Apps.path_bar import PathBar
@@ -839,6 +839,7 @@ class SidebarButton(QPushButton):
 # ── 메인 윈도우 ─────────────────────────────────────────────
 class TerminalTextEdit(QPlainTextEdit):
     inputBytes = pyqtSignal(bytes)
+    PATH_SELECTION_DELIMITERS = set(" \t\r\n\"'`()[]{}<>")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -875,6 +876,35 @@ class TerminalTextEdit(QPlainTextEdit):
         text = event.text()
         if text:
             self.inputBytes.emit(text.encode())
+
+    def mouseDoubleClickEvent(self, event):
+        cursor = self.cursorForPosition(event.pos())
+        block_text = cursor.block().text()
+        index = cursor.positionInBlock()
+
+        if index == len(block_text) and index > 0:
+            index -= 1
+        if not block_text or index < 0 or index >= len(block_text):
+            super().mouseDoubleClickEvent(event)
+            return
+        if not self._is_path_selection_char(block_text[index]):
+            super().mouseDoubleClickEvent(event)
+            return
+
+        start = index
+        while start > 0 and self._is_path_selection_char(block_text[start - 1]):
+            start -= 1
+        end = index + 1
+        while end < len(block_text) and self._is_path_selection_char(block_text[end]):
+            end += 1
+
+        cursor.setPosition(cursor.block().position() + start)
+        cursor.setPosition(cursor.block().position() + end, QTextCursor.KeepAnchor)
+        self.setTextCursor(cursor)
+
+    @classmethod
+    def _is_path_selection_char(cls, char):
+        return char not in cls.PATH_SELECTION_DELIMITERS
 
 
 class PtyTerminalWidget(QWidget):
@@ -1015,6 +1045,7 @@ class PtyTerminalWidget(QWidget):
 
 class XTermEmbeddedWidget(QWidget):
     failed = pyqtSignal()
+    PATH_CHAR_CLASS = "33:48,35-38:48,42-43:48,45-47:48,58:48,61:48,63-64:48,92:48,95:48,126:48"
 
     def __init__(self, command, work_dir, theme_name="light", parent=None):
         super().__init__(parent)
@@ -1121,6 +1152,7 @@ class XTermEmbeddedWidget(QWidget):
             "-cr", "#ffffff",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
+            "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",
             "-e", shell, "-ic", command,
         ]
         try:
