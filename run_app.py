@@ -10,11 +10,25 @@ import shutil
 import shlex
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
+if os.name != "nt":
+    os.environ.setdefault("QT_IM_MODULE", "ibus")
+    os.environ.setdefault("GTK_IM_MODULE", "ibus")
+    os.environ.setdefault("XMODIFIERS", "@im=ibus")
 
 
 def launch_env():
     env = os.environ.copy()
     env.setdefault("NO_AT_BRIDGE", "1")
+    if os.name != "nt":
+        env.setdefault("QT_IM_MODULE", "ibus")
+        env.setdefault("GTK_IM_MODULE", "ibus")
+        env.setdefault("XMODIFIERS", "@im=ibus")
+    for key in ("LANG", "LC_CTYPE", "LC_ALL"):
+        value = env.get(key, "")
+        if "UTF-8" in value.upper() or "UTF8" in value.upper():
+            return env
+    env.setdefault("LANG", "C.UTF-8")
+    env.setdefault("LC_CTYPE", env["LANG"])
     return env
 
 
@@ -90,7 +104,18 @@ def run_terminal_command(command, work_dir):
     terminal_command = terminal_shell_command(command, shell)
     terminal = os.environ.get("TERMINAL")
     if terminal and shutil.which(terminal):
-        subprocess.Popen([terminal, "-e", shell, "-ic", terminal_command], cwd=work_dir, env=launch_env())
+        if os.path.basename(terminal) == "xterm":
+            args = [
+                terminal,
+                "-u8",
+                "-xrm", "XTerm*utf8: 1",
+                "-xrm", "XTerm*locale: true",
+                "-xrm", "XTerm*inputMethod: ibus",
+                "-e", shell, "-ic", terminal_command,
+            ]
+        else:
+            args = [terminal, "-e", shell, "-ic", terminal_command]
+        subprocess.Popen(args, cwd=work_dir, env=launch_env())
         return
 
     launchers = [
@@ -100,7 +125,7 @@ def run_terminal_command(command, work_dir):
         ("xfce4-terminal", ["xfce4-terminal", "--command", f"{shlex.quote(shell)} -ic {shlex.quote(terminal_command)}"]),
         ("lxterminal", ["lxterminal", "-e", shell, "-ic", terminal_command]),
         ("mate-terminal", ["mate-terminal", "--", shell, "-ic", terminal_command]),
-        ("xterm", ["xterm", "-e", shell, "-ic", terminal_command]),
+        ("xterm", ["xterm", "-u8", "-xrm", "XTerm*utf8: 1", "-xrm", "XTerm*locale: true", "-xrm", "XTerm*inputMethod: ibus", "-e", shell, "-ic", terminal_command]),
     ]
     for executable, args in launchers:
         if shutil.which(executable):

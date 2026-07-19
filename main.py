@@ -12,6 +12,10 @@ import signal
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
+if os.name != "nt":
+    os.environ.setdefault("QT_IM_MODULE", "ibus")
+    os.environ.setdefault("GTK_IM_MODULE", "ibus")
+    os.environ.setdefault("XMODIFIERS", "@im=ibus")
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFrame,
@@ -946,6 +950,23 @@ def _active_process_cwd(pid):
     return None
 
 
+def _utf8_terminal_env():
+    env = os.environ.copy()
+    env.setdefault("NO_AT_BRIDGE", "1")
+    env.setdefault("TERM", "xterm-256color")
+    if os.name != "nt":
+        env.setdefault("QT_IM_MODULE", "ibus")
+        env.setdefault("GTK_IM_MODULE", "ibus")
+        env.setdefault("XMODIFIERS", "@im=ibus")
+    for key in ("LANG", "LC_CTYPE", "LC_ALL"):
+        value = env.get(key, "")
+        if "UTF-8" in value.upper() or "UTF8" in value.upper():
+            return env
+    env.setdefault("LANG", "C.UTF-8")
+    env.setdefault("LC_CTYPE", env["LANG"])
+    return env
+
+
 class PtyTerminalWidget(QWidget):
     currentPathChanged = pyqtSignal(str)
     ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -1005,8 +1026,7 @@ class PtyTerminalWidget(QWidget):
             self.master_fd, slave_fd = pty.openpty()
             flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
             fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-            env = os.environ.copy()
-            env.setdefault("TERM", "xterm-256color")
+            env = _utf8_terminal_env()
             self.process = subprocess.Popen(
                 [shell, "-i"],
                 cwd=self.work_dir,
@@ -1200,13 +1220,13 @@ class XTermEmbeddedWidget(QWidget):
 
         shell = self._shell_path()
         command = self._terminal_shell_command(shell)
-        env = os.environ.copy()
-        env.setdefault("TERM", "xterm-256color")
+        env = _utf8_terminal_env()
         cols = max(40, current_size[0] // 8)
         rows = max(12, current_size[1] // 17)
         args = [
             "-into", str(int(self.host.winId())),
             "-geometry", f"{cols}x{rows}",
+            "-u8",
             "-fa", "Monospace",
             "-fs", "10",
             "-sb",
@@ -1214,6 +1234,10 @@ class XTermEmbeddedWidget(QWidget):
             "-bg", "#000000",
             "-fg", "#f2f2f2",
             "-cr", "#ffffff",
+            "-xrm", "XTerm*utf8: 1",
+            "-xrm", "XTerm*utf8Title: true",
+            "-xrm", "XTerm*locale: true",
+            "-xrm", "XTerm*inputMethod: ibus",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
             "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",
