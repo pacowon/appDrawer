@@ -1310,7 +1310,6 @@ class XTermEmbeddedWidget(QWidget):
         shell = self._shell_path()
         command = self._terminal_shell_command(shell)
         env = _utf8_terminal_env()
-        font_family = _xterm_font_family()
         cols = max(40, current_size[0] // 8)
         rows = max(12, current_size[1] // 17)
         args = [
@@ -1319,13 +1318,8 @@ class XTermEmbeddedWidget(QWidget):
             "-u8",
             "-lc",
             "-xim",
-            "-fa", font_family,
-            "-fs", "10",
             "-sb",
             "-rightbar",
-            "-bg", "#000000",
-            "-fg", "#f2f2f2",
-            "-cr", "#ffffff",
             "-xrm", "XTerm*utf8: 1",
             "-xrm", "XTerm*utf8Title: true",
             "-xrm", "XTerm*locale: true",
@@ -1572,7 +1566,7 @@ class EmbeddedTerminalWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        terminal_class = PtyTerminalWidget
+        terminal_class = XTermEmbeddedWidget if XTermEmbeddedWidget.is_available() else PtyTerminalWidget
         self.terminal = terminal_class(command, work_dir, self.theme_name)
         if isinstance(self.terminal, XTermEmbeddedWidget):
             self.terminal.failed.connect(

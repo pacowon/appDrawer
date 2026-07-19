@@ -81,7 +81,6 @@ def xterm_utf8_args():
         "-u8",
         "-lc",
         "-xim",
-        "-fa", xterm_font_family(),
         "-xrm", "XTerm*utf8: 1",
         "-xrm", "XTerm*locale: true",
         "-xrm", "XTerm*openIm: true",
