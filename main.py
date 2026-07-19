@@ -1267,23 +1267,10 @@ class XTermEmbeddedWidget(QWidget):
 
         shell = self._shell_path()
         command = self._terminal_shell_command(shell)
-        env = _utf8_terminal_env()
-        cols = max(40, current_size[0] // 8)
-        rows = max(12, current_size[1] // 17)
+        env = os.environ.copy()
+        env.setdefault("NO_AT_BRIDGE", "1")
         args = [
             "-into", str(int(self.host.winId())),
-            "-geometry", f"{cols}x{rows}",
-            "-u8",
-            "-lc",
-            "-b", "0",
-            "-bg", "#000000",
-            "-fg", "#f2f2f2",
-            "-cr", "#ffffff",
-            "-xrm", "XTerm*utf8: 1",
-            "-xrm", "XTerm*utf8Title: true",
-            "-xrm", "XTerm*locale: true",
-            "-xrm", "XTerm*openIm: true",
-            "-xrm", "XTerm*inputMethod: ibus",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
             "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",
@@ -1430,29 +1417,21 @@ class XTermEmbeddedWidget(QWidget):
             x11.XFree(children)
         return result
 
-    def _resize_x11_tree(self, window_id, width, height):
+    def _resize_x11_window(self, window_id, width, height):
         x11, display = self._x11_display()
         if not display:
             return
         try:
             target_width = max(1, width)
             target_height = max(1, height)
-            pending = [window_id]
-            seen = set()
-            while pending:
-                current = pending.pop(0)
-                if current in seen:
-                    continue
-                seen.add(current)
-                x11.XMoveResizeWindow(
-                    ctypes.c_void_p(display),
-                    ctypes.c_ulong(current),
-                    ctypes.c_int(0),
-                    ctypes.c_int(0),
-                    ctypes.c_uint(target_width),
-                    ctypes.c_uint(target_height),
-                )
-                pending.extend(self._child_windows(x11, display, current))
+            x11.XMoveResizeWindow(
+                ctypes.c_void_p(display),
+                ctypes.c_ulong(window_id),
+                ctypes.c_int(0),
+                ctypes.c_int(0),
+                ctypes.c_uint(target_width),
+                ctypes.c_uint(target_height),
+            )
             x11.XFlush(ctypes.c_void_p(display))
             x11.XSync(ctypes.c_void_p(display), ctypes.c_int(False))
         finally:
@@ -1467,7 +1446,7 @@ class XTermEmbeddedWidget(QWidget):
         window_id = self._find_xterm_window()
         if not window_id:
             return
-        self._resize_x11_tree(window_id, target_size[0], target_size[1])
+        self._resize_x11_window(window_id, target_size[0], target_size[1])
         if self._last_synced_size != target_size:
             self._last_synced_size = target_size
             try:
@@ -2455,7 +2434,7 @@ class MainWindow(QMainWindow):
             )
         self._log_app_click(app_name)
         app_config = get_app_config(self.apps[app_name])
-        if app_config["type"] in {"script", "command", "terminal"}:
+        if app_config["type"] in {"script", "command"}:
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack), log_click=False)
