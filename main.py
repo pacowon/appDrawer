@@ -1006,48 +1006,6 @@ def _qt_terminal_font():
     return font
 
 
-def _xterm_font_family():
-    candidates = [
-        "D2Coding",
-        "NanumGothicCoding",
-        "Nanum Gothic Coding",
-        "NanumBarunGothic",
-        "Noto Sans Mono CJK KR",
-        "Noto Sans CJK KR",
-        "Baekmuk Gulim",
-        "Malgun Gothic",
-        "UnDotum",
-        "DejaVu Sans Mono",
-    ]
-    if os.name != "nt" and shutil.which("fc-match"):
-        for family in candidates:
-            try:
-                matched = subprocess.check_output(
-                    ["fc-match", "-f", "%{family}", family],
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=0.5,
-                )
-            except Exception:
-                continue
-            matched_names = [name.strip() for name in matched.split(",")]
-            if family in matched_names:
-                return family
-        try:
-            matched = subprocess.check_output(
-                ["fc-match", "-f", "%{family}", "monospace:lang=ko"],
-                stderr=subprocess.DEVNULL,
-                text=True,
-                timeout=0.5,
-            )
-            family = matched.split(",")[0].strip()
-            if family:
-                return family
-        except Exception:
-            pass
-    return "Noto Sans Mono CJK KR"
-
-
 class PtyTerminalWidget(QWidget):
     currentPathChanged = pyqtSignal(str)
     ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -2497,7 +2455,7 @@ class MainWindow(QMainWindow):
             )
         self._log_app_click(app_name)
         app_config = get_app_config(self.apps[app_name])
-        if app_config["type"] in {"script", "command"}:
+        if app_config["type"] in {"script", "command", "terminal"}:
             if tab_index >= 0:
                 self.apps_tab_widget.setTabText(tab_index, original_tab_name)
             self.launch_app_popup(app_name, work_dir=self._get_tab_path(tab_stack), log_click=False)

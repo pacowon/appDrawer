@@ -34,59 +34,6 @@ def launch_env():
     return env
 
 
-def xterm_font_family():
-    candidates = [
-        "D2Coding",
-        "NanumGothicCoding",
-        "Nanum Gothic Coding",
-        "NanumBarunGothic",
-        "Noto Sans Mono CJK KR",
-        "Noto Sans CJK KR",
-        "Baekmuk Gulim",
-        "Malgun Gothic",
-        "UnDotum",
-        "DejaVu Sans Mono",
-    ]
-    if os.name != "nt" and shutil.which("fc-match"):
-        for family in candidates:
-            try:
-                matched = subprocess.check_output(
-                    ["fc-match", "-f", "%{family}", family],
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=0.5,
-                )
-            except Exception:
-                continue
-            matched_names = [name.strip() for name in matched.split(",")]
-            if family in matched_names:
-                return family
-        try:
-            matched = subprocess.check_output(
-                ["fc-match", "-f", "%{family}", "monospace:lang=ko"],
-                stderr=subprocess.DEVNULL,
-                text=True,
-                timeout=0.5,
-            )
-            family = matched.split(",")[0].strip()
-            if family:
-                return family
-        except Exception:
-            pass
-    return "Noto Sans Mono CJK KR"
-
-
-def xterm_utf8_args():
-    return [
-        "-u8",
-        "-lc",
-        "-xrm", "XTerm*utf8: 1",
-        "-xrm", "XTerm*locale: true",
-        "-xrm", "XTerm*openIm: true",
-        "-xrm", "XTerm*inputMethod: ibus",
-    ]
-
-
 def run_shell_command(command, work_dir):
     if os.name == "nt":
         subprocess.Popen(command, cwd=work_dir, shell=True, env=launch_env())
@@ -159,11 +106,7 @@ def run_terminal_command(command, work_dir):
     terminal_command = terminal_shell_command(command, shell)
     terminal = os.environ.get("TERMINAL")
     if terminal and shutil.which(terminal):
-        if os.path.basename(terminal) == "xterm":
-            args = [terminal] + xterm_utf8_args() + ["-e", shell, "-ic", terminal_command]
-        else:
-            args = [terminal, "-e", shell, "-ic", terminal_command]
-        subprocess.Popen(args, cwd=work_dir, env=launch_env())
+        subprocess.Popen([terminal, "-e", shell, "-ic", terminal_command], cwd=work_dir, env=launch_env())
         return
 
     launchers = [
@@ -173,7 +116,7 @@ def run_terminal_command(command, work_dir):
         ("xfce4-terminal", ["xfce4-terminal", "--command", f"{shlex.quote(shell)} -ic {shlex.quote(terminal_command)}"]),
         ("lxterminal", ["lxterminal", "-e", shell, "-ic", terminal_command]),
         ("mate-terminal", ["mate-terminal", "--", shell, "-ic", terminal_command]),
-        ("xterm", ["xterm"] + xterm_utf8_args() + ["-e", shell, "-ic", terminal_command]),
+        ("xterm", ["xterm", "-e", shell, "-ic", terminal_command]),
     ]
     for executable, args in launchers:
         if shutil.which(executable):
