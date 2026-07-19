@@ -23,13 +23,71 @@ def launch_env():
         env.setdefault("QT_IM_MODULE", "ibus")
         env.setdefault("GTK_IM_MODULE", "ibus")
         env.setdefault("XMODIFIERS", "@im=ibus")
-    for key in ("LANG", "LC_CTYPE", "LC_ALL"):
+    lang = env.get("LANG", "")
+    if "UTF-8" not in lang.upper() and "UTF8" not in lang.upper():
+        env["LANG"] = "C.UTF-8"
+    for key in ("LC_CTYPE", "LC_ALL"):
         value = env.get(key, "")
-        if "UTF-8" in value.upper() or "UTF8" in value.upper():
-            return env
-    env.setdefault("LANG", "C.UTF-8")
+        if value and "UTF-8" not in value.upper() and "UTF8" not in value.upper():
+            env.pop(key, None)
     env.setdefault("LC_CTYPE", env["LANG"])
     return env
+
+
+def xterm_font_family():
+    candidates = [
+        "D2Coding",
+        "NanumGothicCoding",
+        "Nanum Gothic Coding",
+        "NanumBarunGothic",
+        "Noto Sans Mono CJK KR",
+        "Noto Sans CJK KR",
+        "Baekmuk Gulim",
+        "Malgun Gothic",
+        "UnDotum",
+        "DejaVu Sans Mono",
+    ]
+    if os.name != "nt" and shutil.which("fc-match"):
+        for family in candidates:
+            try:
+                matched = subprocess.check_output(
+                    ["fc-match", "-f", "%{family}", family],
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=0.5,
+                )
+            except Exception:
+                continue
+            matched_names = [name.strip() for name in matched.split(",")]
+            if family in matched_names:
+                return family
+        try:
+            matched = subprocess.check_output(
+                ["fc-match", "-f", "%{family}", "monospace:lang=ko"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=0.5,
+            )
+            family = matched.split(",")[0].strip()
+            if family:
+                return family
+        except Exception:
+            pass
+    return "Noto Sans Mono CJK KR"
+
+
+def xterm_utf8_args():
+    return [
+        "-u8",
+        "-lc",
+        "-xim",
+        "-fa", xterm_font_family(),
+        "-xrm", "XTerm*utf8: 1",
+        "-xrm", "XTerm*locale: true",
+        "-xrm", "XTerm*openIm: true",
+        "-xrm", "XTerm*inputMethod: ibus",
+        "-xrm", "XTerm*preeditType: OverTheSpot",
+    ]
 
 
 def run_shell_command(command, work_dir):
@@ -105,14 +163,7 @@ def run_terminal_command(command, work_dir):
     terminal = os.environ.get("TERMINAL")
     if terminal and shutil.which(terminal):
         if os.path.basename(terminal) == "xterm":
-            args = [
-                terminal,
-                "-u8",
-                "-xrm", "XTerm*utf8: 1",
-                "-xrm", "XTerm*locale: true",
-                "-xrm", "XTerm*inputMethod: ibus",
-                "-e", shell, "-ic", terminal_command,
-            ]
+            args = [terminal] + xterm_utf8_args() + ["-e", shell, "-ic", terminal_command]
         else:
             args = [terminal, "-e", shell, "-ic", terminal_command]
         subprocess.Popen(args, cwd=work_dir, env=launch_env())
@@ -125,7 +176,7 @@ def run_terminal_command(command, work_dir):
         ("xfce4-terminal", ["xfce4-terminal", "--command", f"{shlex.quote(shell)} -ic {shlex.quote(terminal_command)}"]),
         ("lxterminal", ["lxterminal", "-e", shell, "-ic", terminal_command]),
         ("mate-terminal", ["mate-terminal", "--", shell, "-ic", terminal_command]),
-        ("xterm", ["xterm", "-u8", "-xrm", "XTerm*utf8: 1", "-xrm", "XTerm*locale: true", "-xrm", "XTerm*inputMethod: ibus", "-e", shell, "-ic", terminal_command]),
+        ("xterm", ["xterm"] + xterm_utf8_args() + ["-e", shell, "-ic", terminal_command]),
     ]
     for executable, args in launchers:
         if shutil.which(executable):

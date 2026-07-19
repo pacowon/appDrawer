@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier, QEvent
-from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor, QTextCursor
+from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor, QTextCursor, QFontDatabase
 from PyQt5.uic import loadUi
 
 from Apps.path_bar import PathBar
@@ -850,8 +850,9 @@ class TerminalTextEdit(QPlainTextEdit):
         self.setReadOnly(True)
         self.setUndoRedoEnabled(False)
         self.setLineWrapMode(QPlainTextEdit.NoWrap)
-        self.setFont(QFont("Consolas", 10))
+        self.setFont(_qt_terminal_font())
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setAttribute(Qt.WA_InputMethodEnabled, True)
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -879,7 +880,13 @@ class TerminalTextEdit(QPlainTextEdit):
             return
         text = event.text()
         if text:
-            self.inputBytes.emit(text.encode())
+            self.inputBytes.emit(text.encode("utf-8"))
+
+    def inputMethodEvent(self, event):
+        text = event.commitString()
+        if text:
+            self.inputBytes.emit(text.encode("utf-8"))
+        event.accept()
 
     def mouseDoubleClickEvent(self, event):
         cursor = self.cursorForPosition(event.pos())
@@ -958,13 +965,81 @@ def _utf8_terminal_env():
         env.setdefault("QT_IM_MODULE", "ibus")
         env.setdefault("GTK_IM_MODULE", "ibus")
         env.setdefault("XMODIFIERS", "@im=ibus")
-    for key in ("LANG", "LC_CTYPE", "LC_ALL"):
+    lang = env.get("LANG", "")
+    if "UTF-8" not in lang.upper() and "UTF8" not in lang.upper():
+        env["LANG"] = "C.UTF-8"
+    for key in ("LC_CTYPE", "LC_ALL"):
         value = env.get(key, "")
-        if "UTF-8" in value.upper() or "UTF8" in value.upper():
-            return env
-    env.setdefault("LANG", "C.UTF-8")
+        if value and "UTF-8" not in value.upper() and "UTF8" not in value.upper():
+            env.pop(key, None)
     env.setdefault("LC_CTYPE", env["LANG"])
     return env
+
+
+def _qt_terminal_font():
+    candidates = [
+        "D2Coding",
+        "NanumGothicCoding",
+        "Nanum Gothic Coding",
+        "NanumBarunGothic",
+        "Noto Sans Mono CJK KR",
+        "Noto Sans CJK KR",
+        "Baekmuk Gulim",
+        "Malgun Gothic",
+        "UnDotum",
+        "DejaVu Sans Mono",
+        "Consolas",
+        "Monospace",
+    ]
+    families = set(QFontDatabase().families())
+    for family in candidates:
+        if family in families:
+            return QFont(family, 10)
+    font = QFont("Monospace", 10)
+    font.setStyleHint(QFont.TypeWriter)
+    return font
+
+
+def _xterm_font_family():
+    candidates = [
+        "D2Coding",
+        "NanumGothicCoding",
+        "Nanum Gothic Coding",
+        "NanumBarunGothic",
+        "Noto Sans Mono CJK KR",
+        "Noto Sans CJK KR",
+        "Baekmuk Gulim",
+        "Malgun Gothic",
+        "UnDotum",
+        "DejaVu Sans Mono",
+    ]
+    if os.name != "nt" and shutil.which("fc-match"):
+        for family in candidates:
+            try:
+                matched = subprocess.check_output(
+                    ["fc-match", "-f", "%{family}", family],
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=0.5,
+                )
+            except Exception:
+                continue
+            matched_names = [name.strip() for name in matched.split(",")]
+            if family in matched_names:
+                return family
+        try:
+            matched = subprocess.check_output(
+                ["fc-match", "-f", "%{family}", "monospace:lang=ko"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=0.5,
+            )
+            family = matched.split(",")[0].strip()
+            if family:
+                return family
+        except Exception:
+            pass
+    return "Noto Sans Mono CJK KR"
 
 
 class PtyTerminalWidget(QWidget):
@@ -1221,13 +1296,16 @@ class XTermEmbeddedWidget(QWidget):
         shell = self._shell_path()
         command = self._terminal_shell_command(shell)
         env = _utf8_terminal_env()
+        font_family = _xterm_font_family()
         cols = max(40, current_size[0] // 8)
         rows = max(12, current_size[1] // 17)
         args = [
             "-into", str(int(self.host.winId())),
             "-geometry", f"{cols}x{rows}",
             "-u8",
-            "-fa", "Monospace",
+            "-lc",
+            "-xim",
+            "-fa", font_family,
             "-fs", "10",
             "-sb",
             "-rightbar",
@@ -1237,7 +1315,9 @@ class XTermEmbeddedWidget(QWidget):
             "-xrm", "XTerm*utf8: 1",
             "-xrm", "XTerm*utf8Title: true",
             "-xrm", "XTerm*locale: true",
+            "-xrm", "XTerm*openIm: true",
             "-xrm", "XTerm*inputMethod: ibus",
+            "-xrm", "XTerm*preeditType: OverTheSpot",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
             "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",
