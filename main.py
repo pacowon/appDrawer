@@ -946,6 +946,48 @@ def _active_process_cwd(pid):
     return None
 
 
+def _korean_xterm_font_family():
+    candidates = [
+        "D2Coding",
+        "NanumGothicCoding",
+        "Nanum Gothic Coding",
+        "NanumBarunGothic",
+        "Noto Sans Mono CJK KR",
+        "Noto Sans CJK KR",
+        "UnDotum",
+        "Baekmuk Gulim",
+    ]
+    if os.name == "nt" or not shutil.which("fc-match"):
+        return None
+
+    for family in candidates:
+        try:
+            matched = subprocess.check_output(
+                ["fc-match", "-f", "%{family}", family],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=0.5,
+            )
+        except Exception:
+            continue
+        matched_names = [name.strip() for name in matched.split(",")]
+        if family in matched_names:
+            return family
+
+    try:
+        matched = subprocess.check_output(
+            ["fc-match", "-f", "%{family}", "monospace:lang=ko"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=0.5,
+        )
+    except Exception:
+        return None
+
+    family = matched.split(",")[0].strip()
+    return family or None
+
+
 class PtyTerminalWidget(QWidget):
     currentPathChanged = pyqtSignal(str)
     ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -1203,8 +1245,18 @@ class XTermEmbeddedWidget(QWidget):
         command = self._terminal_shell_command(shell)
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
+        if os.name != "nt":
+            env.setdefault("XMODIFIERS", "@im=ibus")
+            lang = env.get("LANG", "")
+            if "UTF-8" not in lang.upper() and "UTF8" not in lang.upper():
+                env["LANG"] = "C.UTF-8"
+            lc_ctype = env.get("LC_CTYPE", "")
+            if lc_ctype and "UTF-8" not in lc_ctype.upper() and "UTF8" not in lc_ctype.upper():
+                env.pop("LC_CTYPE", None)
+            env.setdefault("LC_CTYPE", env["LANG"])
         cols = max(40, current_size[0] // 8)
         rows = max(12, current_size[1] // 17)
+        korean_font = _korean_xterm_font_family()
         args = [
             "-into", str(int(self.host.winId())),
             "-geometry", f"{cols}x{rows}",
@@ -1215,11 +1267,22 @@ class XTermEmbeddedWidget(QWidget):
             "-bg", "#000000",
             "-fg", "#f2f2f2",
             "-cr", "#ffffff",
+            "-u8",
+            "-lc",
+            "-xrm", "XTerm*utf8: 1",
+            "-xrm", "XTerm*utf8Title: true",
+            "-xrm", "XTerm*locale: true",
+            "-xrm", "XTerm*openIm: true",
+            "-xrm", "XTerm*inputMethod: ibus",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
             "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",
             "-e", shell, "-ic", command,
         ]
+        if korean_font:
+            args[args.index("-e"):args.index("-e")] = [
+                "-xrm", f"XTerm*faceNameDoublesize: {korean_font}",
+            ]
         try:
             self.process = subprocess.Popen(["xterm"] + args, cwd=self.work_dir, env=env)
             self.host.setFocus()
