@@ -1317,8 +1317,10 @@ class XTermEmbeddedWidget(QWidget):
             "-geometry", f"{cols}x{rows}",
             "-u8",
             "-lc",
-            "-sb",
-            "-rightbar",
+            "-b", "0",
+            "-bg", "#000000",
+            "-fg", "#f2f2f2",
+            "-cr", "#ffffff",
             "-xrm", "XTerm*utf8: 1",
             "-xrm", "XTerm*utf8Title: true",
             "-xrm", "XTerm*locale: true",
@@ -1538,8 +1540,8 @@ class XTermEmbeddedWidget(QWidget):
             }}
             QWidget#xterm_host {{
                 background-color: #000000;
-                border: 1px solid {colors['border']};
-                border-radius: 8px;
+                border: none;
+                border-radius: 0px;
             }}
         """)
 
