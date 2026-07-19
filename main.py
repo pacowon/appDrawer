@@ -1317,7 +1317,6 @@ class XTermEmbeddedWidget(QWidget):
             "-geometry", f"{cols}x{rows}",
             "-u8",
             "-lc",
-            "-xim",
             "-sb",
             "-rightbar",
             "-xrm", "XTerm*utf8: 1",

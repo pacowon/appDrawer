@@ -80,7 +80,6 @@ def xterm_utf8_args():
     return [
         "-u8",
         "-lc",
-        "-xim",
         "-xrm", "XTerm*utf8: 1",
         "-xrm", "XTerm*locale: true",
         "-xrm", "XTerm*openIm: true",
