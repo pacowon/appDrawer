@@ -1324,7 +1324,6 @@ class XTermEmbeddedWidget(QWidget):
             "-xrm", "XTerm*locale: true",
             "-xrm", "XTerm*openIm: true",
             "-xrm", "XTerm*inputMethod: ibus",
-            "-xrm", "XTerm*preeditType: OverTheSpot",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
             "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",

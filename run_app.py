@@ -84,7 +84,6 @@ def xterm_utf8_args():
         "-xrm", "XTerm*locale: true",
         "-xrm", "XTerm*openIm: true",
         "-xrm", "XTerm*inputMethod: ibus",
-        "-xrm", "XTerm*preeditType: OverTheSpot",
     ]
 
 
