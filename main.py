@@ -847,12 +847,13 @@ class TerminalTextEdit(QPlainTextEdit):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setReadOnly(True)
+        self.setReadOnly(False)
         self.setUndoRedoEnabled(False)
         self.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.setFont(_qt_terminal_font())
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_InputMethodEnabled, True)
+        self.setCursorWidth(8)
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -887,6 +888,11 @@ class TerminalTextEdit(QPlainTextEdit):
         if text:
             self.inputBytes.emit(text.encode("utf-8"))
         event.accept()
+
+    def inputMethodQuery(self, query):
+        if query == Qt.ImEnabled:
+            return True
+        return super().inputMethodQuery(query)
 
     def mouseDoubleClickEvent(self, event):
         cursor = self.cursorForPosition(event.pos())
@@ -1161,14 +1167,16 @@ class PtyTerminalWidget(QWidget):
         colors = THEMES[self.theme_name]
         self.setStyleSheet(f"""
             PtyTerminalWidget {{
-                background-color: {colors['panel_bg']};
+                background-color: #000000;
             }}
             TerminalTextEdit {{
-                background-color: {colors['input_bg']};
-                color: {colors['text']};
+                background-color: #000000;
+                color: #f2f2f2;
                 border: 1px solid {colors['border']};
                 border-radius: 8px;
                 padding: 10px;
+                selection-background-color: {colors['accent']};
+                selection-color: #ffffff;
             }}
         """)
 
@@ -1528,10 +1536,10 @@ class XTermEmbeddedWidget(QWidget):
         colors = THEMES[self.theme_name]
         self.setStyleSheet(f"""
             XTermEmbeddedWidget {{
-                background-color: {colors['panel_bg']};
+                background-color: #000000;
             }}
             QWidget#xterm_host {{
-                background-color: {colors['input_bg']};
+                background-color: #000000;
                 border: 1px solid {colors['border']};
                 border-radius: 8px;
             }}
@@ -1558,7 +1566,7 @@ class EmbeddedTerminalWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        terminal_class = XTermEmbeddedWidget if XTermEmbeddedWidget.is_available() else PtyTerminalWidget
+        terminal_class = PtyTerminalWidget
         self.terminal = terminal_class(command, work_dir, self.theme_name)
         if isinstance(self.terminal, XTermEmbeddedWidget):
             self.terminal.failed.connect(
