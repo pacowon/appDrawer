@@ -1102,19 +1102,25 @@ class PtyTerminalWidget(QWidget):
         try:
             import fcntl
             import pty
+            import termios
 
             shell = self._shell_path()
             self.master_fd, slave_fd = pty.openpty()
             flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
             fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
             env = _utf8_terminal_env()
+
+            def setup_child_terminal():
+                os.setsid()
+                fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
+
             self.process = subprocess.Popen(
                 [shell, "-i"],
                 cwd=self.work_dir,
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
-                preexec_fn=os.setsid,
+                preexec_fn=setup_child_terminal,
                 env=env,
                 close_fds=True,
             )
