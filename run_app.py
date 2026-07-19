@@ -10,27 +10,11 @@ import shutil
 import shlex
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
-if os.name != "nt":
-    os.environ.setdefault("QT_IM_MODULE", "ibus")
-    os.environ.setdefault("GTK_IM_MODULE", "ibus")
-    os.environ.setdefault("XMODIFIERS", "@im=ibus")
 
 
 def launch_env():
     env = os.environ.copy()
     env.setdefault("NO_AT_BRIDGE", "1")
-    if os.name != "nt":
-        env.setdefault("QT_IM_MODULE", "ibus")
-        env.setdefault("GTK_IM_MODULE", "ibus")
-        env.setdefault("XMODIFIERS", "@im=ibus")
-    lang = env.get("LANG", "")
-    if "UTF-8" not in lang.upper() and "UTF8" not in lang.upper():
-        env["LANG"] = "C.UTF-8"
-    for key in ("LC_CTYPE", "LC_ALL"):
-        value = env.get(key, "")
-        if value and "UTF-8" not in value.upper() and "UTF8" not in value.upper():
-            env.pop(key, None)
-    env.setdefault("LC_CTYPE", env["LANG"])
     return env
 
 

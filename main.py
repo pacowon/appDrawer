@@ -12,10 +12,6 @@ import signal
 from datetime import datetime
 
 os.environ.setdefault("NO_AT_BRIDGE", "1")
-if os.name != "nt":
-    os.environ.setdefault("QT_IM_MODULE", "ibus")
-    os.environ.setdefault("GTK_IM_MODULE", "ibus")
-    os.environ.setdefault("XMODIFIERS", "@im=ibus")
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFrame,
@@ -24,7 +20,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTableWidgetItem, QHeaderView, QAbstractItemView,
                              QLineEdit, QSpinBox, QPlainTextEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QSocketNotifier, QEvent
-from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor, QTextCursor, QFontDatabase
+from PyQt5.QtGui import QFont, QFontMetrics, QDrag, QPixmap, QPainter, QColor, QTextCursor
 from PyQt5.uic import loadUi
 
 from Apps.path_bar import PathBar
@@ -847,13 +843,11 @@ class TerminalTextEdit(QPlainTextEdit):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setReadOnly(False)
+        self.setReadOnly(True)
         self.setUndoRedoEnabled(False)
         self.setLineWrapMode(QPlainTextEdit.NoWrap)
-        self.setFont(_qt_terminal_font())
+        self.setFont(QFont("Consolas", 10))
         self.setFocusPolicy(Qt.StrongFocus)
-        self.setAttribute(Qt.WA_InputMethodEnabled, True)
-        self.setCursorWidth(8)
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -881,18 +875,7 @@ class TerminalTextEdit(QPlainTextEdit):
             return
         text = event.text()
         if text:
-            self.inputBytes.emit(text.encode("utf-8"))
-
-    def inputMethodEvent(self, event):
-        text = event.commitString()
-        if text:
-            self.inputBytes.emit(text.encode("utf-8"))
-        event.accept()
-
-    def inputMethodQuery(self, query):
-        if query == Qt.ImEnabled:
-            return True
-        return super().inputMethodQuery(query)
+            self.inputBytes.emit(text.encode())
 
     def mouseDoubleClickEvent(self, event):
         cursor = self.cursorForPosition(event.pos())
@@ -963,49 +946,6 @@ def _active_process_cwd(pid):
     return None
 
 
-def _utf8_terminal_env():
-    env = os.environ.copy()
-    env.setdefault("NO_AT_BRIDGE", "1")
-    env.setdefault("TERM", "xterm-256color")
-    if os.name != "nt":
-        env.setdefault("QT_IM_MODULE", "ibus")
-        env.setdefault("GTK_IM_MODULE", "ibus")
-        env.setdefault("XMODIFIERS", "@im=ibus")
-    lang = env.get("LANG", "")
-    if "UTF-8" not in lang.upper() and "UTF8" not in lang.upper():
-        env["LANG"] = "C.UTF-8"
-    for key in ("LC_CTYPE", "LC_ALL"):
-        value = env.get(key, "")
-        if value and "UTF-8" not in value.upper() and "UTF8" not in value.upper():
-            env.pop(key, None)
-    env.setdefault("LC_CTYPE", env["LANG"])
-    return env
-
-
-def _qt_terminal_font():
-    candidates = [
-        "D2Coding",
-        "NanumGothicCoding",
-        "Nanum Gothic Coding",
-        "NanumBarunGothic",
-        "Noto Sans Mono CJK KR",
-        "Noto Sans CJK KR",
-        "Baekmuk Gulim",
-        "Malgun Gothic",
-        "UnDotum",
-        "DejaVu Sans Mono",
-        "Consolas",
-        "Monospace",
-    ]
-    families = set(QFontDatabase().families())
-    for family in candidates:
-        if family in families:
-            return QFont(family, 10)
-    font = QFont("Monospace", 10)
-    font.setStyleHint(QFont.TypeWriter)
-    return font
-
-
 class PtyTerminalWidget(QWidget):
     currentPathChanged = pyqtSignal(str)
     ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -1060,17 +1000,13 @@ class PtyTerminalWidget(QWidget):
         try:
             import fcntl
             import pty
-            import termios
 
             shell = self._shell_path()
             self.master_fd, slave_fd = pty.openpty()
             flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
             fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-            env = _utf8_terminal_env()
-
-            def setup_child_terminal():
-                os.setsid()
-                fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
+            env = os.environ.copy()
+            env.setdefault("TERM", "xterm-256color")
 
             self.process = subprocess.Popen(
                 [shell, "-i"],
@@ -1078,7 +1014,7 @@ class PtyTerminalWidget(QWidget):
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
-                preexec_fn=setup_child_terminal,
+                preexec_fn=os.setsid,
                 env=env,
                 close_fds=True,
             )
@@ -1131,16 +1067,14 @@ class PtyTerminalWidget(QWidget):
         colors = THEMES[self.theme_name]
         self.setStyleSheet(f"""
             PtyTerminalWidget {{
-                background-color: #000000;
+                background-color: {colors['panel_bg']};
             }}
             TerminalTextEdit {{
-                background-color: #000000;
-                color: #f2f2f2;
+                background-color: {colors['input_bg']};
+                color: {colors['text']};
                 border: 1px solid {colors['border']};
                 border-radius: 8px;
                 padding: 10px;
-                selection-background-color: {colors['accent']};
-                selection-color: #ffffff;
             }}
         """)
 
@@ -1268,9 +1202,19 @@ class XTermEmbeddedWidget(QWidget):
         shell = self._shell_path()
         command = self._terminal_shell_command(shell)
         env = os.environ.copy()
-        env.setdefault("NO_AT_BRIDGE", "1")
+        env.setdefault("TERM", "xterm-256color")
+        cols = max(40, current_size[0] // 8)
+        rows = max(12, current_size[1] // 17)
         args = [
             "-into", str(int(self.host.winId())),
+            "-geometry", f"{cols}x{rows}",
+            "-fa", "Monospace",
+            "-fs", "10",
+            "-sb",
+            "-rightbar",
+            "-bg", "#000000",
+            "-fg", "#f2f2f2",
+            "-cr", "#ffffff",
             "-xrm", "XTerm*selectToClipboard: true",
             "-xrm", "XTerm*cursorBlink: true",
             "-xrm", f"XTerm*charClass: {self.PATH_CHAR_CLASS}",
@@ -1417,21 +1361,29 @@ class XTermEmbeddedWidget(QWidget):
             x11.XFree(children)
         return result
 
-    def _resize_x11_window(self, window_id, width, height):
+    def _resize_x11_tree(self, window_id, width, height):
         x11, display = self._x11_display()
         if not display:
             return
         try:
             target_width = max(1, width)
             target_height = max(1, height)
-            x11.XMoveResizeWindow(
-                ctypes.c_void_p(display),
-                ctypes.c_ulong(window_id),
-                ctypes.c_int(0),
-                ctypes.c_int(0),
-                ctypes.c_uint(target_width),
-                ctypes.c_uint(target_height),
-            )
+            pending = [window_id]
+            seen = set()
+            while pending:
+                current = pending.pop(0)
+                if current in seen:
+                    continue
+                seen.add(current)
+                x11.XMoveResizeWindow(
+                    ctypes.c_void_p(display),
+                    ctypes.c_ulong(current),
+                    ctypes.c_int(0),
+                    ctypes.c_int(0),
+                    ctypes.c_uint(target_width),
+                    ctypes.c_uint(target_height),
+                )
+                pending.extend(self._child_windows(x11, display, current))
             x11.XFlush(ctypes.c_void_p(display))
             x11.XSync(ctypes.c_void_p(display), ctypes.c_int(False))
         finally:
@@ -1446,7 +1398,7 @@ class XTermEmbeddedWidget(QWidget):
         window_id = self._find_xterm_window()
         if not window_id:
             return
-        self._resize_x11_window(window_id, target_size[0], target_size[1])
+        self._resize_x11_tree(window_id, target_size[0], target_size[1])
         if self._last_synced_size != target_size:
             self._last_synced_size = target_size
             try:
