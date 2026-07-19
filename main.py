@@ -2163,6 +2163,12 @@ class MainWindow(QMainWindow):
         pb = self._tab_path_bars.get(id(tab_stack))
         return pb.path if pb else os.getcwd()
 
+    def _format_running_tab_name(self, app_name, work_dir):
+        folder_name = os.path.basename(os.path.normpath(work_dir))
+        if not folder_name:
+            folder_name = os.path.normpath(work_dir)
+        return f"{folder_name} : {app_name}"
+
     def _get_active_tab_path(self):
         """현재 활성 탭의 PathBar 경로 반환 (팝업용)"""
         idx = self.apps_tab_widget.currentIndex()
@@ -2269,8 +2275,12 @@ class MainWindow(QMainWindow):
         # tab_container 기준으로 탭 인덱스 찾기
         tab_container = self._stack_to_container.get(id(tab_stack))
         tab_index = self.apps_tab_widget.indexOf(tab_container) if tab_container else -1
+        target_path = self._get_tab_path(tab_stack)
         if tab_index >= 0:
-            self.apps_tab_widget.setTabText(tab_index, app_name)
+            self.apps_tab_widget.setTabText(
+                tab_index,
+                self._format_running_tab_name(app_name, target_path),
+            )
         self._log_app_click(app_name)
         app_config = get_app_config(self.apps[app_name])
         if app_config["type"] in {"script", "command"}:
@@ -2318,7 +2328,6 @@ class MainWindow(QMainWindow):
                 background-color: {colors['accent_hover']};
             }}
         """)
-        target_path = self._get_tab_path(tab_stack)
         previous_cwd = os.getcwd()
         try:
             os.chdir(target_path)
